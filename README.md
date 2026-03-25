@@ -33,7 +33,8 @@
 | 文件 | 说明 |
 |------|------|
 | `前端开发工程师知识点大全.md` | 知识点总纲索引 |
-| `frontend-knowledge-docs.md` | 文档规范说明 |
+| `frontend-knowledge-docs.md` | 文档格式规范 |
+| `INTERVIEW-SOP.md` | **面经处理标准流程（SOP）** — 提供面经即可自动处理 |
 
 ### 面经资料
 
