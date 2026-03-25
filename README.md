@@ -1,105 +1,133 @@
 # 前端开发工程师知识库 - 总目录
 
-> 基于《前端开发工程师知识点大全》展开的详细讲解文档
-> 每个知识点均包含：详细讲解 + 真实面试题 + 满分答案
+> 系统化的前端知识体系，每个知识点包含：详细讲解 + 代码示例 + 真实面试题 + 满分答案
 > 最后更新：2026-03-25
 
 ---
 
 ## 📁 文档结构
 
-### 核心知识库
+### 核心知识库（16个文件）
 
-| 文件 | 内容 | 主要知识点 |
-|------|------|-----------|
-| `01-HTML-CSS基础.md` | HTML 基础 | 文档结构、语义化标签、表单、DOM 操作 |
-| `01b-CSS基础与进阶.md` | CSS 基础与进阶 | 选择器、盒模型、Flexbox、Grid、动画、主题切换 |
-| `02-JavaScript基础与进阶.md` | JavaScript | 变量、闭包、原型链、异步、事件循环、防抖节流 |
-| `03-TypeScript详解.md` | TypeScript | 类型系统、泛型、装饰器、工具类型 |
-| `04-Vue框架详解.md` | Vue 3 | 组合式API、响应式原理、Router、Pinia |
-| `05-React框架详解.md` | React | Hooks、Fiber、Router、Redux/Zustand、性能优化 |
-| `06-Node.js详解.md` | Node.js | 事件循环、模块系统、Express、SSE |
-| `07-工程化与构建工具.md` | 工程化 | Webpack、Vite、ESLint、测试、CI/CD |
-| `08-计算机基础.md` | 计算机基础 | HTTP、TCP/IP、数据结构、算法 |
-| `09-性能优化.md` | 性能优化 | Core Web Vitals、加载优化、渲染优化、大文件上传 |
-| `10-Web安全.md` | Web 安全 | XSS、CSRF、SQL注入、Prompt Injection |
-| `11-图形可视化.md` | 图形与可视化 | Canvas、SVG、WebGL、ECharts |
-| `12-移动端开发.md` | 移动端 | 适配、PWA、小程序、Hybrid |
-| `13-软技能.md` | 软技能 | 项目管理、沟通、代码规范 |
-| `14-新技术趋势.md` | 新技术 | WebAssembly、微前端、低代码 |
-| `15-AI视频场景.md` | AI与视频 | Canvas预览、流式渲染、Prompt管理、超时处理 |
+| 文件 | 章节 | 主要内容 |
+|------|------|---------|
+| `01-HTML-CSS基础.md` | 1.1–1.6 | HTML结构、语义化、Meta标签、行内/块级、Script位置、白屏排查 |
+| `01b-CSS基础与进阶.md` | 1.2–1.10 | 选择器、盒模型、Flex、Grid、响应式、动画、主题切换、居中方案 |
+| `02-JavaScript基础与进阶.md` | 2.1–2.10 | 变量、数据类型、闭包、原型链、异步、事件循环、防抖节流、深拷贝、去重 |
+| `03-TypeScript详解.md` | 3.1–3.x | 类型系统、泛型、高级类型、装饰器、工具类型 |
+| `04-Vue框架详解.md` | 4.0–4.6 | 响应式原理、组合式API、Router、Pinia、组件通信、性能优化 |
+| `05-React框架详解.md` | 5.1–5.3 | Hooks、虚拟DOM/Diff、Fiber、Router、Redux/Zustand、性能优化 |
+| `06-Node.js详解.md` | 6.1–6.x | 事件循环、模块系统、Stream、Express、SSE |
+| `07-工程化与构建工具.md` | 7.0–7.8 | Vue CLI、Webpack、Vite、ESLint、测试、CI/CD、Git、AI辅助开发 |
+| `08-计算机基础.md` | 8.1–8.5 | HTTP/HTTPS、TCP、缓存、跨域、数据结构、算法 |
+| `09-性能优化.md` | 9.1–9.17 | Core Web Vitals、加载优化、渲染优化、虚拟滚动、大文件上传、Web Workers |
+| `10-Web安全.md` | 10.1–10.5 | XSS、CSRF、SQL注入、水印保护、Prompt Injection |
+| `11-图形可视化.md` | 11.0–11.3 | Canvas 2D、SVG、ECharts |
+| `12-移动端开发.md` | 12.0–12.3 | 移动端适配、小程序、JSBridge |
+| `13-软技能.md` | 13.0–13.6 | Code Review、沟通协作、项目管理、技术分享、技术挑战、职业规划 |
+| `14-新技术趋势.md` | 14.0–14.9 | WebAssembly、Serverless、AI辅助、CSS新特性、WebGPU、微前端、监控系统、重构迁移 |
+| `15-AI视频场景.md` | 15.1–15.8 | AI视频编辑器架构、流式渲染、Agent组件、国际化、Canvas预览、超时处理 |
 
 ### 参考文档
 
 | 文件 | 说明 |
 |------|------|
-| `前端开发工程师知识点大全.md` | 知识点总纲 |
-| `frontend-knowledge-docs.md` | 补充文档 |
+| `前端开发工程师知识点大全.md` | 知识点总纲索引 |
+| `frontend-knowledge-docs.md` | 文档规范说明 |
 
 ### 面经资料
 
 | 文件 | 说明 |
 |------|------|
 | `interview-materials/` | 面试题汇总目录 |
-| `interview-materials/补充-2026-03-25.md` | 2026年3月补充（共27题） |
+| `interview-materials/补充-2026-03-25.md` | 2026年3月补充（共62题，5批） |
 
 ---
 
-## 🔍 核心知识点速查
+## 🔍 高频面试题速查
 
-### JavaScript 必考题
+### JavaScript
 
-1. **var/let/const 区别** → 02-JavaScript基础与进阶.md
-2. **闭包原理与应用** → 02-JavaScript基础与进阶.md
-3. **原型链** → 02-JavaScript基础与进阶.md
-4. **Promise/async/await** → 02-JavaScript基础与进阶.md
-5. **事件循环（Event Loop）** → 02-JavaScript基础与进阶.md
-6. **防抖节流** → 02-JavaScript基础与进阶.md
-7. **深拷贝/深对比** → 02-JavaScript基础与进阶.md
-8. **DocumentFragment** → 02-JavaScript基础与进阶.md
+| 题目 | 位置 |
+|------|------|
+| var/let/const 区别 | 02 § 2.1.1 |
+| 数据类型与类型判断 | 02 § 2.1.2 |
+| 闭包原理与应用 | 02 § 2.1.3 |
+| 原型链机制 | 02 § 2.1.4 |
+| Promise/async/await | 02 § 2.3 |
+| 事件循环（Event Loop） | 02 § 2.6 |
+| 防抖与节流 | 02 § 2.7 |
+| 深拷贝实现 | 02 § 2.9 |
+| 数组去重 | 02 § 2.10 |
 
-### CSS 必考题
+### CSS
 
-1. **盒模型** → 01b-CSS基础与进阶.md
-2. **BFC** → 01b-CSS基础与进阶.md
-3. **Flexbox** → 01b-CSS基础与进阶.md
-4. **Grid** → 01b-CSS基础与进阶.md
-5. **水平垂直居中** → 01b-CSS基础与进阶.md
-6. **主题色切换** → 01b-CSS基础与进阶.md
+| 题目 | 位置 |
+|------|------|
+| 盒模型与 box-sizing | 01b § 1.2.3 |
+| BFC 原理 | 01b § 1.3 |
+| Flexbox 布局 | 01b § 1.2.4 |
+| Grid 布局 | 01b § 1.2.5 |
+| 水平垂直居中 | 01b § 1.10 |
+| 主题色切换 | 01b § 1.9 |
 
-### Vue 必考题
+### 框架
 
-1. **响应式原理（Proxy vs defineProperty）** → 04-Vue框架详解.md
-2. **数据驱动视图** → 04-Vue框架详解.md
-3. **组件通信方式** → 04-Vue框架详解.md
-4. **生命周期** → 04-Vue框架详解.md
+| 题目 | 位置 |
+|------|------|
+| Vue3 响应式原理（Proxy vs defineProperty） | 04 § 4.0 |
+| React Fiber 架构 | 05 § 5.2.1 |
+| 虚拟 DOM 与 Diff 算法 | 05 § 5.2.1 |
+| React Hooks 原理 | 05 § 5.1.3 |
+| 状态管理选型（Zustand/Redux/Pinia） | 05 § 5.3 |
 
-### React 必考题
+### 网络与安全
 
-1. **Fiber 架构** → 05-React框架详解.md
-2. **Hooks 原理** → 05-React框架详解.md
-3. **虚拟 DOM 与 Diff 算法** → 05-React框架详解.md
-4. **状态管理（Zustand/Redux）** → 05-React框架详解.md
+| 题目 | 位置 |
+|------|------|
+| HTTP 状态码 | 08 § 8.1.4 |
+| 强缓存与协商缓存 | 08 § 8.1.4 |
+| 跨域解决方案 | 08 § 8.1.5 |
+| XSS 与 CSRF 防范 | 10 § 10.1/10.2 |
+| Prompt Injection | 10 § 10.5 |
 
-### 性能优化必考题
+### 性能与工程化
 
-1. **Core Web Vitals** → 09-性能优化.md
-2. **虚拟滚动** → 09-性能优化.md
-3. **大文件上传** → 09-性能优化.md
-4. **Web Workers** → 09-性能优化.md
-5. **requestIdleCallback** → 09-性能优化.md
+| 题目 | 位置 |
+|------|------|
+| Core Web Vitals | 09 § 9.1 |
+| 万级长列表优化 | 09 § 9.17 |
+| 大文件上传 | 09 § 9.15 |
+| Vite vs Webpack | 07 § 7.2.2 |
+| 微前端架构 | 14 § 14.7 |
+| 前端监控系统 | 14 § 14.6 |
 
-### 安全必考题
+### AI 与新技术
 
-1. **XSS 攻击与防御** → 10-Web安全.md
-2. **CSRF 攻击与防御** → 10-Web安全.md
-3. **Prompt Injection** → 10-Web安全.md
+| 题目 | 位置 |
+|------|------|
+| AI 视频编辑器架构 | 15 § 15.1 |
+| AI Agent 配置化组件 | 15 § 15.3 |
+| WebGPU 原理 | 14 § 14.5 |
+| JSBridge 实现 | 12 § 12.3 |
 
-### 工程化必考题
+---
 
-1. **Vite vs Webpack** → 07-工程化与构建工具.md
-2. **ESLint 检查过程** → 07-工程化与构建工具.md
-3. **Git pull vs fetch** → 07-工程化与构建工具.md
+## 📝 内容规范
+
+每个知识点格式：
+
+```markdown
+## X.X 主题名称
+
+#### 知识点详解
+（原理讲解 + 代码示例）
+
+#### 真实面试题
+**题目：...**
+**满分答案：**
+（结构化答案）
+```
 
 ---
 

@@ -767,7 +767,7 @@ React 的 Diff 算法基于三个假设：
 ))}
 ```
 
-### 5.2.1 React Router 和原生路由区别
+### 5.2.2 React Router 和原生路由区别
 
 #### 知识点详解
 
@@ -856,7 +856,7 @@ function matchRoute(routes, pathname) {
 
 ---
 
-### 5.2.2 React Router v6
+### 5.2.3 React Router v6
 
 ```jsx
 import {
@@ -959,7 +959,7 @@ function ProtectedRoute({ children }) {
 />
 ```
 
-### 5.2.3 Redux Toolkit
+### 5.2.4 Redux Toolkit
 
 ```javascript
 // store/counterSlice.js
@@ -1044,7 +1044,7 @@ function Counter() {
 }
 ```
 
-### 5.2.4 性能优化
+### 5.2.5 性能优化
 
 ```jsx
 // 1. React.memo
@@ -1128,7 +1128,7 @@ function GoodComponent({ items }) {
 }
 ```
 
-### 5.2.5 React 18 新特性
+### 5.2.6 React 18 新特性
 
 ```jsx
 // 1. Concurrent Mode（并发模式）

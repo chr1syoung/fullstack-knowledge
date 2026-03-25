@@ -1728,7 +1728,7 @@ document.cookie = 'name=value; path=/; max-age=3600; Secure; SameSite=Strict';
 
 ---
 
-## 1.2 Meta 标签详解
+## 1.3 Meta 标签详解
 
 > meta 标签是前端面试高频考点，涵盖 SEO、移动端适配、社交分享、安全策略等多个方向。
 
@@ -2472,7 +2472,7 @@ if (isStandalone) {
 
 ---
 
-## 1.6 HTML 行内元素和块级元素
+## 1.4 HTML 行内元素和块级元素
 
 #### 知识点详解
 
@@ -2556,7 +2556,7 @@ HTML5:
 
 ---
 
-## 1.7 Script 标签位置：head vs body
+## 1.5 Script 标签位置：head vs body
 
 #### 知识点详解
 
@@ -2630,7 +2630,7 @@ JS 执行/下载                                  ▓▓▓▓▓
 
 ---
 
-## 1.8 白屏问题排查
+## 1.6 白屏问题排查
 
 #### 知识点详解
 

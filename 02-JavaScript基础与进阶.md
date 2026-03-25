@@ -2605,7 +2605,7 @@ const store = createStore(rootReducer);
 
 ---
 
-## 2.19 大对象深度对比
+## 2.4 大对象深度对比
 
 #### 知识点详解
 
@@ -2723,11 +2723,11 @@ function fastDeepCompare(obj1, obj2) {
 
 ---
 
-## 2.20 DocumentFragment API
+## 2.5 DocumentFragment API
 
 ---
 
-## 2.21 浏览器事件循环（Event Loop）
+## 2.6 浏览器事件循环（Event Loop）
 
 #### 知识点详解
 
@@ -2864,7 +2864,7 @@ async1();
 
 ---
 
-## 2.22 防抖与节流（面试重点）
+## 2.7 防抖与节流（面试重点）
 
 #### 知识点详解
 
@@ -3042,7 +3042,7 @@ function debounce(fn, delay, immediate = false) {
 
 ---
 
-## 2.23 数组根据对象属性去重
+## 2.8 数组根据对象属性去重
 
 #### 知识点详解
 
@@ -3269,7 +3269,7 @@ container.appendChild(fragment);
 ---
 
 
-## 2.24 深拷贝实现
+## 2.9 深拷贝实现
 
 #### 知识点详解
 
@@ -3390,7 +3390,7 @@ const cloned = structuredClone(obj);
 
 ---
 
-## 2.25 数组去重方法汇总
+## 2.10 数组去重方法汇总
 
 #### 知识点详解
 
