@@ -227,6 +227,40 @@ p { color: inherit; }  /* 继承 body 的颜色 */
 }
 ```
 
+#### 真实面试题
+
+**题目：谈谈你对 CSS 盒模型的理解，以及 box-sizing 的作用。**
+
+**满分答案：**
+
+**盒模型两种模式：**
+
+1. **标准盒模型（content-box）**
+   - `width` = 内容宽度
+   - 实际占用宽度 = width + padding + border + margin
+
+2. **IE 盒模型（border-box）**
+   - `width` = 内容 + padding + border
+   - 实际占用宽度 = width + margin
+
+**box-sizing 作用：**
+- `content-box`（默认）：按标准盒模型计算
+- `border-box`：按 IE 盒模型计算，更符合直觉
+
+**最佳实践：**
+```css
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+```
+全局设置 `border-box`，避免计算混乱。
+
+**Margin 合并问题：**
+- 相邻兄弟元素：取较大值
+- 父子元素：子元素 margin 会"穿透"父元素
+- 解决：父元素创建 BFC（overflow: hidden、padding、border 等）
+```
+
 ### 1.2.4 Flexbox 布局
 
 ```css

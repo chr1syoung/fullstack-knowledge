@@ -813,6 +813,46 @@ function createHandlers() {
 3. 只在必要时使用闭包
 4. 注意闭包捕获的变量大小
 
+#### 真实面试题
+
+**题目：什么是闭包？它在实际开发中有什么应用场景？**
+
+**满分答案：**
+
+**定义：** 闭包是函数与其词法环境的组合，使函数能访问其外部作用域的变量，即使外部函数已执行完毕。
+
+**核心应用场景：**
+
+1. **数据私有化**（模块模式）
+```javascript
+function createCounter() {
+    let count = 0;  // 私有变量，外部无法直接访问
+    return {
+        increment: () => ++count,
+        decrement: () => --count,
+        getCount: () => count
+    };
+}
+const counter = createCounter();
+counter.increment(); // 1
+```
+
+2. **函数工厂**
+```javascript
+function multiply(x) {
+    return (y) => x * y;  // 记住 x
+}
+const double = multiply(2);
+const triple = multiply(3);
+double(5); // 10
+```
+
+3. **防抖/节流**（缓存 timer 变量）
+
+4. **React Hooks**（useState 内部用闭包保存状态）
+
+**注意事项：** 闭包会持有外部变量引用，可能导致内存泄漏，用完要及时解除引用。
+
 ---
 
 ### 2.1.4 原型与原型链
@@ -1155,6 +1195,34 @@ class Dog extends Animal {
 | 组合继承 | 无问题 | ✓ | 2 次 |
 | 寄生组合式 | 无问题 | ✓ | 1 次 |
 | ES6 Class | 无问题 | ✓ | 1 次 |
+
+#### 真实面试题
+
+**题目：描述一下 JavaScript 的原型链机制。**
+
+**满分答案：**
+
+**核心概念：**
+- 每个对象都有 `__proto__` 指向其构造函数的 `prototype`
+- 访问属性时，先找自身，找不到就沿 `__proto__` 向上查找，直到 `null`
+
+```javascript
+function Dog(name) { this.name = name; }
+Dog.prototype.bark = function() { console.log('woof'); };
+
+const dog = new Dog('Rex');
+// 查找链：dog → Dog.prototype → Object.prototype → null
+
+dog.bark();          // 在 Dog.prototype 找到
+dog.hasOwnProperty; // 在 Object.prototype 找到
+dog.xxx;            // undefined（到 null 还没找到）
+```
+
+**原型链终点：** `Object.prototype.__proto__ === null`
+
+**instanceof 原理：** 沿原型链查找，看右侧构造函数的 `prototype` 是否在链上
+
+**ES6 Class 本质：** 语法糖，底层仍是原型链
 
 ---
 
@@ -3200,3 +3268,174 @@ container.appendChild(fragment);
 
 ---
 
+
+## 2.24 深拷贝实现
+
+#### 知识点详解
+
+**浅拷贝 vs 深拷贝：**
+
+```javascript
+// 浅拷贝：只复制第一层，引用类型仍共享
+const obj = { a: 1, b: { c: 2 } };
+const shallow = { ...obj };
+shallow.b.c = 99;
+console.log(obj.b.c); // 99（被修改了！）
+
+// 深拷贝：完全独立的副本
+const deep = deepClone(obj);
+deep.b.c = 99;
+console.log(obj.b.c); // 2（不受影响）
+```
+
+**方法一：JSON 序列化（简单但有局限）**
+
+```javascript
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+
+// 局限：
+// ❌ 函数、undefined、Symbol 会丢失
+// ❌ Date 变成字符串
+// ❌ RegExp 变成 {}
+// ❌ 循环引用会报错
+```
+
+**方法二：递归实现（完整版）**
+
+```javascript
+function deepClone(obj, map = new WeakMap()) {
+    // 处理基本类型和 null
+    if (obj === null || typeof obj !== 'object') return obj;
+
+    // 处理特殊类型
+    if (obj instanceof Date) return new Date(obj);
+    if (obj instanceof RegExp) return new RegExp(obj.source, obj.flags);
+    if (obj instanceof Map) {
+        const clonedMap = new Map();
+        obj.forEach((v, k) => clonedMap.set(deepClone(k, map), deepClone(v, map)));
+        return clonedMap;
+    }
+    if (obj instanceof Set) {
+        const clonedSet = new Set();
+        obj.forEach(v => clonedSet.add(deepClone(v, map)));
+        return clonedSet;
+    }
+
+    // 处理循环引用
+    if (map.has(obj)) return map.get(obj);
+
+    // 创建同类型的空对象（保留原型链）
+    const cloned = Array.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+    map.set(obj, cloned);
+
+    // 递归复制所有属性（包括 Symbol）
+    [...Object.keys(obj), ...Object.getOwnPropertySymbols(obj)].forEach(key => {
+        cloned[key] = deepClone(obj[key], map);
+    });
+
+    return cloned;
+}
+
+// 测试
+const original = {
+    num: 1,
+    str: 'hello',
+    arr: [1, 2, 3],
+    nested: { a: { b: 1 } },
+    date: new Date(),
+    reg: /test/gi,
+    fn: () => 'function',
+    sym: Symbol('test'),
+    map: new Map([['key', 'value']]),
+    set: new Set([1, 2, 3])
+};
+// 循环引用
+original.self = original;
+
+const cloned = deepClone(original);
+cloned.nested.a.b = 99;
+console.log(original.nested.a.b); // 1（不受影响）
+console.log(cloned.self === cloned); // true（循环引用正确处理）
+```
+
+**方法三：structuredClone（现代浏览器原生）**
+
+```javascript
+// 浏览器原生深拷贝，支持循环引用、Date、Map、Set 等
+const cloned = structuredClone(obj);
+
+// 局限：不支持函数、Symbol、DOM 节点
+```
+
+**性能对比：**
+
+| 方法 | 速度 | 支持函数 | 支持循环引用 | 支持 Date/RegExp |
+|------|------|---------|------------|-----------------|
+| JSON | 快 | ❌ | ❌ | ❌ |
+| 递归 | 中 | ✅ | ✅ | ✅ |
+| structuredClone | 快 | ❌ | ✅ | ✅ |
+
+#### 真实面试题
+
+**题目：手写实现一个深拷贝函数。**
+
+**满分答案：**
+
+关键点：
+1. **基本类型直接返回**
+2. **特殊对象单独处理**（Date、RegExp、Map、Set）
+3. **WeakMap 处理循环引用**（避免无限递归）
+4. **保留原型链**（`Object.create(Object.getPrototypeOf(obj))`）
+5. **处理 Symbol 键**
+
+---
+
+## 2.25 数组去重方法汇总
+
+#### 知识点详解
+
+```javascript
+const arr = [1, 2, 2, 3, 3, 3, 'a', 'a', null, null, NaN, NaN];
+
+// 方法1：Set（最简洁，推荐）
+const unique1 = [...new Set(arr)];
+// [1, 2, 3, 'a', null, NaN]  ✅ NaN 也能去重
+
+// 方法2：filter + indexOf
+const unique2 = arr.filter((item, index) => arr.indexOf(item) === index);
+// ❌ NaN 无法去重（indexOf 找不到 NaN）
+
+// 方法3：reduce
+const unique3 = arr.reduce((acc, cur) => {
+    if (!acc.includes(cur)) acc.push(cur);
+    return acc;
+}, []);
+// ✅ includes 能识别 NaN
+
+// 方法4：Map（可处理对象去重）
+const unique4 = [...new Map(arr.map(item => [item, item])).values()];
+
+// 方法5：对象数组按属性去重
+const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' },
+    { id: 1, name: 'Alice duplicate' }
+];
+const uniqueUsers = [...new Map(users.map(u => [u.id, u])).values()];
+// [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }]
+```
+
+#### 真实面试题
+
+**题目：如何实现数组去重？请列举几种方法。**
+
+**满分答案：**
+
+1. **Set（推荐）**：`[...new Set(arr)]`，简洁，能处理 NaN
+2. **filter + indexOf**：语义清晰，但 NaN 无法去重
+3. **reduce + includes**：灵活，能处理 NaN
+4. **Map**：适合对象数组按 key 去重
+
+**面试加分：** 说明 `indexOf` 用 `===` 比较，无法识别 NaN；而 `Set` 和 `includes` 用 SameValueZero 算法，能识别 NaN。
+
+---
