@@ -3720,3 +3720,2158 @@ console.log(JSON.stringify(arrayToTreeSorted(tasks), null, 2));
 - 可扩展：支持按 `order` 字段排序
 
 ---
+
+## 2.12 不冒泡的事件
+
+#### 知识点详解
+
+有些事件天生不会冒泡，理解它们对于事件委托和性能优化至关重要。
+
+**完整列表：**
+
+```javascript
+// 焦点事件（可捕获但不冒泡）
+focus        // 对应冒泡版本：focusin
+blur         // 对应冒泡版本：focusout
+
+// 鼠标进入/离开（不冒泡，且不进入子元素）
+mouseenter   // 对应冒泡版本：mouseover
+mouseleave   // 对应冒泡版本：mouseout
+
+// 资源加载/错误
+load
+unload
+abort
+error
+
+// 视图事件
+resize       // 部分浏览器不冒泡
+scroll      // 部分浏览器不冒泡
+
+// 指针事件（Pointer Events API）
+pointerenter  // 对应冒泡版本：pointerover
+pointerleave  // 对应冒泡版本：pointerout
+
+// 媒体事件
+playing
+paused
+ended
+waiting
+canplay
+loadedmetadata
+// ... 更多媒体相关事件
+
+// 其他
+DOMNodeInsertedIntoDocument  // 已废弃
+DOMNodeRemovedFromDocument   // 已废弃
+beforeinput
+```
+
+**焦点事件捕获 vs 冒泡：**
+
+```javascript
+// focus/blur 不冒泡，但可以在捕获阶段监听
+element.addEventListener('focus', handler, true);   // 捕获阶段
+element.addEventListener('focus', handler, false); // 无效，不会冒泡
+
+// 现代推荐：使用 focusin/focusout（冒泡版本）
+element.addEventListener('focusin', handler);  // 会冒泡
+```
+
+**mouseenter vs mouseover 关键区别：**
+
+```javascript
+// mouseover：进入元素或其任意子元素都会触发（冒泡）
+// mouseenter：仅进入元素本身时触发，进入子元素不触发（不冒泡）
+
+const parent = document.getElementById('parent');
+const child = parent.querySelector('#child');
+
+// mouseover：从父元素进入子元素
+//   → 父元素触发 mouseout
+//   → 子元素触发 mouseover（冒泡到父元素）
+//   → 父元素又触发 mouseover！
+
+// mouseenter/mouseleave：完全不会冒泡
+// 从父元素进入子元素：
+//   → 父元素触发 mouseleave（离开父元素）
+//   → 子元素触发 mouseenter（进入子元素）
+//   → 父元素不再触发任何事件
+```
+
+#### 真实面试题
+
+**题目：不会冒泡的事件有哪些？**
+
+**满分答案：**
+
+**核心概念：**
+不冒泡的事件是指事件触发后不会沿 DOM 树向上传播到祖先元素。
+
+**完整分类列表：**
+
+| 类别 | 事件 | 对应的冒泡版本 |
+|------|------|----------------|
+| 焦点事件 | `focus` / `blur` | `focusin` / `focusout` |
+| 鼠标进入/离开 | `mouseenter` / `mouseleave` | `mouseover` / `mouseout` |
+| 资源加载 | `load` / `unload` / `abort` / `error` | — |
+| 视图事件 | `resize` / `scroll` | — |
+| 指针事件 | `pointerenter` / `pointerleave` | `pointerover` / `pointerout` |
+| 媒体事件 | `playing` / `paused` / `ended` 等 | — |
+
+**为什么这些事件设计为不冒泡？**
+
+1. **focus/blur**：焦点切换是元素自身行为，不需要通知祖先元素；使用 `focusin/focusout` 需要冒泡时才用
+2. **mouseenter/mouseleave**：设计初衷就是避免 `mouseover/mouseout` 频繁触发子元素的干扰（进入子元素时父元素反复触发）
+3. **load/error**：加载状态是叶子节点的职责，不需要祖先参与
+4. **resize**：窗口大小变化只需要在窗口层面处理一次
+5. **scroll**：滚动事件如果冒泡，每个祖先都会收到，性能开销大
+6. **媒体事件**：播放状态属于媒体元素自身，祖先不需要感知
+
+**实际应用注意事项：**
+```javascript
+// ❌ 不能对 blur 使用事件委托
+document.addEventListener('blur', (e) => {
+    // e.target 是失焦的元素，但事件不会冒泡到这里！
+}, true); // 只能在捕获阶段监听
+
+// ✅ 正确做法：使用 focusout（冒泡版本）
+document.addEventListener('focusout', (e) => {
+    // 可以冒泡到 document
+});
+
+// ✅ 下拉菜单使用 mouseenter/mouseleave 避免子元素干扰
+menu.addEventListener('mouseenter', showMenu);
+menu.addEventListener('mouseleave', hideMenu);
+```
+
+---
+
+## 2.13 mouseEnter 和 mouseOver 的区别
+
+#### 知识点详解
+
+`mouseenter` 和 `mouseover`（以及 `mouseleave` 和 `mouseout`）看似相似，实际行为有本质区别。
+
+**核心区别总结：**
+
+| 特性 | mouseenter | mouseover |
+|------|-----------|-----------|
+| 是否冒泡 | 不冒泡 | 冒泡 |
+| 进入子元素时 | 不触发 | 触发（父元素也会触发 mouseout→mouseover） |
+| 事件委托 | 不支持 | 支持 |
+| 性能 | 更好（触发次数少） | 较差（频繁触发） |
+
+**代码演示 — mouseover（冒泡 + 子元素干扰）：**
+
+```javascript
+const parent = document.getElementById('parent');
+const child = parent.querySelector('#child');
+
+parent.addEventListener('mouseover', (e) => {
+    console.log('mouseover:', e.target.id);
+});
+
+// 鼠标从 parent 外部 → parent（触发1次）
+// 鼠标从 parent → child（触发多次）：
+//   1. parent 触发 mouseout（离开 parent）
+//   2. child 触发 mouseover（进入 child，冒泡到 parent）
+//   3. parent 再次触发 mouseover！
+//   → 父元素的 mouseover 被触发了两次！
+```
+
+**代码演示 — mouseenter（简单直接）：**
+
+```javascript
+parent.addEventListener('mouseenter', (e) => {
+    console.log('mouseenter:', e.target.id);
+});
+
+// 鼠标从 parent 外部 → parent（触发1次）
+// 鼠标从 parent → child：
+//   → parent 不触发任何事件
+//   → child 触发 mouseenter
+// ✅ 父元素完全不受子元素影响
+```
+
+**mouseleave vs mouseout 区别同理：**
+
+```javascript
+// 鼠标从 child → parent（鼠标回到父元素）
+// mouseout：
+//   1. child 触发 mouseout（离开 child）
+//   2. parent 触发 mouseover（冒泡）
+
+// mouseleave：
+//   1. child 触发 mouseleave
+//   ✅ parent 不触发任何事件
+```
+
+**实际使用场景：**
+
+```javascript
+// 场景1：下拉菜单/悬浮菜单（推荐 mouseenter/mouseleave）
+const dropdown = document.querySelector('.dropdown');
+const menu = dropdown.querySelector('.menu');
+
+// ✅ 推荐：mouseenter + mouseleave
+dropdown.addEventListener('mouseenter', () => menu.style.display = 'block');
+dropdown.addEventListener('mouseleave', () => menu.style.display = 'none');
+
+// ❌ 不推荐：mouseover/mouseout → 鼠标移到菜单项时会反复触发
+//   导致菜单闪烁/抖动
+
+// 场景2：元素高亮效果（鼠标悬停高亮）
+item.addEventListener('mouseenter', () => item.classList.add('hover'));
+item.addEventListener('mouseleave', () => item.classList.remove('hover'));
+
+// 场景3：需要事件委托时只能用 mouseover/mouseout
+// （mouseenter 不冒泡，无法委托）
+container.addEventListener('mouseover', (e) => {
+    if (e.target.matches('.item')) {
+        handleItemHover(e.target);
+    }
+});
+```
+
+**性能对比（子元素多时差异明显）：**
+
+```javascript
+// 有20个子元素的容器
+// 使用 mouseover：鼠标从父元素进入任一子元素，会触发多次事件
+// 使用 mouseenter：每个子元素只触发一次进入事件
+
+// 结论：mouseenter 触发次数 ≈ 子元素数量
+//       mouseover 触发次数 ≈ 子元素数量 × 穿越次数
+```
+
+#### 真实面试题
+
+**题目：mouseEnter 和 mouseOver 有什么区别？**
+
+**满分答案：**
+
+**核心区别（两点）：**
+
+1. **冒泡 vs 不冒泡**：`mouseover` 会冒泡，`mouseenter` 不会冒泡
+2. **子元素干扰**：
+   - `mouseover`：鼠标从父元素进入子元素时，父元素也会触发 `mouseover`（因为冒泡）
+   - `mouseenter`：仅在进入绑定元素本身时触发，进入子元素不会触发父元素的 `mouseenter`
+
+**代码对比：**
+
+```javascript
+// mouseover（进入子元素时父元素会重复触发）
+parent.addEventListener('mouseover', () => console.log('over'));
+// 父→子：输出 "over"（从父离开）→ "over"（进入子，冒泡到父）
+
+// mouseenter（完全不受子元素影响）
+parent.addEventListener('mouseenter', () => console.log('enter'));
+// 父→子：只触发子元素的 enter，父元素不触发任何事件
+```
+
+**使用场景建议：**
+
+| 场景 | 推荐事件 |
+|------|---------|
+| 下拉菜单、悬浮卡片 | `mouseenter` / `mouseleave` ✅ |
+| 元素高亮/样式变化 | `mouseenter` / `mouseleave` ✅ |
+| 需要事件委托（给动态子元素） | `mouseover` / `mouseout` |
+| 拖拽进入/离开检测 | `dragenter` / `dragleave`（类似机制） |
+
+**结论**：除需要事件委托外，优先使用 `mouseenter/mouseleave`，行为更可预测，性能也更好。
+
+---
+
+## 2.14 MessageChannel
+
+#### 知识点详解
+
+`MessageChannel` 是 Web API 中用于在同一源的不同 browsing context（如 iframe、worker、主线程）之间建立通信通道的机制。
+
+**基本 API：**
+
+```javascript
+// 创建通道，产生两个互通的端口
+const channel = new MessageChannel();
+const port1 = channel.port1;
+const port2 = channel.port2;
+
+// 端口1发，端口2收
+port1.onmessage = (event) => console.log('收到:', event.data);
+port2.postMessage('Hello from port2');
+
+// 端口2发，端口1收（反向通道）
+port2.onmessage = (event) => console.log('收到:', event.data);
+port1.postMessage('Hello from port1');
+
+// 注意：必须显式打开端口才能通信
+port1.start();
+port2.start();
+
+// 不再使用时关闭
+port1.close();
+```
+
+**核心特点 — 宏任务级别的异步：**
+
+```javascript
+// MessageChannel 的 onmessage 是宏任务（不像 Promise.then 是微任务）
+const channel = new MessageChannel();
+let order = [];
+
+queueMicrotask(() => order.push('microtask'));
+channel.port1.onmessage = () => order.push('MessageChannel');
+
+queueMicrotask(() => order.push('microtask2'));
+channel.port2.postMessage('ping');
+
+// 执行顺序：microtask → microtask2 → MessageChannel
+// 验证：
+Promise.resolve().then(() => order.push('Promise微任务'));
+setTimeout(() => order.push('setTimeout宏任务'), 0);
+// 结果顺序：Promise微任务 → setTimeout宏任务 → MessageChannel
+```
+
+**使用场景一：Web Worker 通信（并发）：**
+
+```javascript
+// 主线程
+const worker = new Worker('worker.js');
+worker.postMessage({ type: 'start', data: heavyComputation() });
+
+// worker.js
+self.onmessage = (e) => {
+    const result = compute(e.data.data);
+    self.postMessage({ type: 'result', result });
+};
+
+// 或者使用 MessageChannel 让 Worker 直接与另一个 Worker 通信
+```
+
+**使用场景二：大任务分片（避免阻塞主线程）：**
+
+```javascript
+function scheduleWork(callback, slots) {
+    let startTime = performance.now();
+    let currentSlot = 0;
+
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (e) => {
+        if (currentSlot < slots && performance.now() - startTime < 16) {
+            // 帧还有时间，继续执行
+            currentSlot++;
+            callback(currentSlot);
+            channel.port2.postMessage(null);
+        } else {
+            // 时间耗尽，让出主线程
+            startTime = performance.now();
+            currentSlot = 0;
+            requestAnimationFrame(() => {
+                channel.port2.postMessage(null);
+            });
+        }
+    };
+    channel.port2.postMessage(null);
+    return () => channel.port1.close();
+}
+```
+
+**使用场景三：Vue3 的调度器（scheduler）：**
+
+```javascript
+// Vue3 源码简化版
+const queue = [];
+let isFlushing = false;
+const p = Promise.resolve();
+
+function queueJob(job) {
+    if (!queue.includes(job)) {
+        queue.push(job);
+        if (!isFlushing) {
+            isFlushing = true;
+            // 使用 MessageChannel 将 flush 放到微任务之后、下一帧之前
+            nextTick().then(() => {
+                flushing = true;
+                let job;
+                while ((job = queue.shift())) {
+                    job();
+                }
+                flushing = false;
+            });
+        }
+    }
+}
+
+// nextTick 的实现优先使用 MessageChannel（性能优于 setTimeout(0)）
+let timerFunc;
+if (typeof MessageChannel !== 'undefined') {
+    const channel = new MessageChannel();
+    const port = channel.port1;
+    channel.port2.postMessage(null);
+    port.onmessage = () => flushJobs; // 宏任务
+    timerFunc = () => port.postMessage(null);
+} else {
+    timerFunc = () => setTimeout(flushJobs, 0);
+}
+```
+
+**使用场景四：React 的调度器：**
+
+```javascript
+// React 早期版本的调度器中曾使用 MessageChannel
+// 现代 React 使用 scheduler 包，内部实现类似：
+
+// Scheduler 优先使用 MessageChannel，回退到 setTimeout
+const channel = new MessageChannel();
+const port = channel.port1;
+channel.port2.postMessage(null);
+
+// port.onmessage 会在下一帧前被调用
+// 比 setTimeout(0) 更早执行，但仍然是异步的
+```
+
+#### 真实面试题
+
+**题目：MessageChannel 是什么？有什么使用场景？**
+
+**满分答案：**
+
+**概念：**
+`MessageChannel` 创建两个互通的端口（`port1` 和 `port2`），可以从一个端口发送消息，另一个端口异步接收。
+
+```javascript
+const channel = new MessageChannel();
+const { port1, port2 } = channel;
+
+port1.onmessage = (e) => console.log('port1收到:', e.data);
+port2.postMessage('Hello');
+
+// 注意：需要手动 start() 才正式开始通信（在新版浏览器中 onmessage 已自动 start）
+```
+
+**与 postMessage 的区别：**
+
+| 特性 | postMessage | MessageChannel |
+|------|------------|----------------|
+| 通信方式 | 直接指定目标 window/worker | 创建端口对，端口间互通 |
+| 适用场景 | 不同源通信（iframe/worker） | 同一源内的高效通信 |
+| 性能 | 需要结构化克隆 | 同上，但更轻量 |
+| 灵活性 | 需要目标引用 | 解耦，端口可传递给任意地方 |
+
+**四个典型使用场景：**
+
+**1. Web Worker 通信**
+```javascript
+const worker = new Worker('task.js');
+worker.postMessage({ type: 'compute', data: largeArray });
+worker.onmessage = (e) => console.log(e.data.result);
+```
+
+**2. 大任务分片（时间切片）**
+```javascript
+// 将大数据处理分散到多帧执行，避免主线程卡顿
+function chunkProcess(data, processItem) {
+    const channel = new MessageChannel();
+    let i = 0;
+    const work = () => {
+        let batch = 0;
+        while (i < data.length && batch < 1000) {
+            processItem(data[i++]);
+            batch++;
+        }
+        if (i < data.length) {
+            channel.port2.postMessage(null); // 触发下一帧
+        } else {
+            channel.port1.close();
+        }
+    };
+    channel.port2.onmessage = work;
+    channel.port1.onmessage = work;
+    channel.port2.postMessage(null);
+}
+```
+
+**3. Vue3 调度器（scheduler）**
+```javascript
+// Vue3 用 MessageChannel 实现 nextTick 的异步队列调度
+// 确保同一 tick 内的多次响应式更新合并为一次 DOM 更新
+// 比 setTimeout(0) 更早执行，比 Promise.then() 延迟更可控
+```
+
+**4. React 调度器**
+```javascript
+// React Scheduler 中使用 MessageChannel 作为任务调度器
+// 实现类似 requestIdleCallback 的功能（该 API 浏览器支持不完整）
+// 将任务分散到浏览器空闲时间执行
+```
+
+**关键结论**：`MessageChannel` 的核心价值在于宏任务级别的异步调度，是 Vue3 和 React 等框架实现高性能响应式和任务调度的基础设施。
+
+---
+
+## 2.15 async/await 实现原理
+
+#### 知识点详解
+
+`async/await` 是 ES2017 引入的异步编程语法，本质是 Generator 函数 + 自动执行器的语法糖。
+
+**async 函数的转换过程：**
+
+```javascript
+// 原始代码
+async function fetchData() {
+    const res = await fetch('/api/data');
+    return res.json();
+}
+
+// babel 转换后大致等价于：
+function fetchData() {
+    return _asyncToGenerator(function* () {
+        const res = yield fetch('/api/data');
+        return res.json();
+    });
+}
+```
+
+**自动执行器 `_asyncToGenerator`：**
+
+```javascript
+function _asyncToGenerator(generatorFn) {
+    return function(...args) {
+        const generator = generatorFn.apply(this, args);
+
+        function handle(result) {
+            // result 是 { done, value }
+            if (result.done) {
+                // Generator 执行完毕，将返回值作为 Promise resolve 值
+                return Promise.resolve(result.value);
+            }
+
+            // result.value 是 yield 后面表达式的值（通常是 Promise）
+            return Promise.resolve(result.value)
+                .then(
+                    (resolvedValue) => handle(generator.next(resolvedValue)),
+                    (reason) => handle(generator.throw(reason))
+                );
+        }
+
+        return handle(generator.next());
+    };
+}
+```
+
+**手动模拟 async 函数行为：**
+
+```javascript
+// 手写一个 async 函数的等价实现
+function myAsync(fn) {
+    return function(...args) {
+        const gen = fn.apply(this, args);
+
+        return new Promise((resolve, reject) => {
+            function step(key, arg) {
+                let result;
+                try {
+                    result = gen[key](arg);
+                } catch (err) {
+                    return reject(err);
+                }
+
+                const { done, value } = result;
+                if (done) {
+                    return resolve(value);
+                } else {
+                    return Promise.resolve(value).then(
+                        (val) => step('next', val),
+                        (err) => step('throw', err)
+                    );
+                }
+            }
+
+            step('next');
+        });
+    };
+}
+
+// 使用
+const fetchData = myAsync(function* () {
+    const res = yield Promise.resolve({ json: () => 'data' });
+    return res.json();
+});
+
+fetchData().then(console.log); // 'data'
+```
+
+**await 的细节：**
+
+```javascript
+// 1. await 后面不是 Promise 会自动包装
+async function test() {
+    const result = await 123;
+    // 等价于 await Promise.resolve(123)
+    console.log(result); // 123
+}
+
+// 2. await Promise.reject() 会抛出错误
+async function test2() {
+    try {
+        await Promise.reject('error');
+    } catch (e) {
+        console.log(e); // 'error'
+    }
+}
+
+// 3. 错误处理的 try/catch 对应 Promise.catch
+async function test3() {
+    try {
+        await fetch('/api');
+    } catch (err) {
+        // 等价于 Promise.catch()
+        console.error(err);
+    }
+}
+
+// 4. 错误会阻止后续代码执行
+async function test4() {
+    await step1(); // 失败
+    await step2(); // 不会执行
+    await step3(); // 不会执行
+}
+
+// 5. 顶层 await（ES2022 / 模块中）
+// await outside_async function.js
+const data = await fetch('/api/config').then(r => r.json());
+export default data;
+```
+
+**async 函数的返回值：**
+
+```javascript
+async function fn() { return 1; }
+fn() instanceof Promise; // true，始终返回 Promise
+```
+
+#### 真实面试题
+
+**题目：async、await 的实现原理是什么？**
+
+**满分答案：**
+
+**核心原理：**
+`async/await` 是 Generator 函数 + 自动执行器的语法糖。编译器将 `async` 函数转为 Generator，将 `await` 转为 `yield`，再用自动执行器自动调用 `next()` 推进 Generator。
+
+**转换过程：**
+
+```javascript
+// 原始代码
+async function example() {
+    const a = await step1();
+    const b = await step2(a);
+    return b;
+}
+
+// Babel/编译器转换后等价于：
+function example() {
+    return _asyncToGenerator(function* () {
+        const a = yield step1();
+        const b = yield step2(a);
+        return b;
+    })();
+}
+```
+
+**自动执行器核心代码：**
+
+```javascript
+function _asyncToGenerator(generatorFn) {
+    return function(...args) {
+        const gen = generatorFn.apply(this, args);
+
+        function step(method, arg) {
+            let result;
+            try {
+                result = gen[method](arg);
+            } catch (err) {
+                return Promise.reject(err);
+            }
+
+            const { done, value } = result;
+            if (done) {
+                return Promise.resolve(value);
+            }
+
+            // 关键：用 Promise.then 等待 yield 的值，然后继续 next
+            return Promise.resolve(value).then(
+                (val) => step('next', val),    // 成功，继续
+                (err) => step('throw', err)     // 失败，抛出
+            );
+        }
+
+        return step('next');
+    };
+}
+```
+
+**错误处理机制：**
+
+```javascript
+// async 函数中的 try/catch 对应 Promise.catch
+async function safe() {
+    try {
+        await riskyOperation();
+    } catch (err) {
+        // 等价于 .catch()
+        console.error('出错:', err.message);
+    }
+    // try/catch 之后代码继续执行
+}
+
+// 等价于：
+function safe() {
+    return riskyOperation()
+        .catch((err) => console.error('出错:', err.message));
+}
+```
+
+**await 的特殊规则：**
+
+```javascript
+// 1. await 非 Promise 自动包装
+await 123;          // 等价于 await Promise.resolve(123)
+
+// 2. await undefined 会永久等待（错误）
+// await undefined;  // ❌ 永远不会 resolve
+
+// 3. 顶层 await（模块中可用）
+// const config = await fetch('/config').then(r => r.json());
+```
+
+**Generator 与 async/await 的关系：**
+
+| 特性 | Generator | async/await |
+|------|-----------|-------------|
+| 关键字 | `function*` + `yield` | `async function` + `await` |
+| 返回值 | Iterator | Promise |
+| 执行方式 | 手动调用 `.next()` | 自动执行 |
+| 暂停恢复 | 同步代码中可暂停 | 只能在 async 函数中暂停 |
+| 错误处理 | try/catch | try/catch |
+| 语法简洁度 | 较复杂 | 更简洁 |
+
+---
+
+## 2.16 Proxy 监听嵌套对象
+
+#### 知识点详解
+
+`Proxy` 本身只能拦截第一层属性操作，嵌套对象需要递归代理才能监听。
+
+**问题演示 — 默认只能拦截第一层：**
+
+```javascript
+const obj = { person: { name: 'Alice', age: 30 } };
+const proxy = new Proxy(obj, {
+    get(target, key, receiver) {
+        console.log(`get: ${String(key)}`);
+        return Reflect.get(target, key, receiver);
+    },
+    set(target, key, value, receiver) {
+        console.log(`set: ${String(key)} = ${value}`);
+        return Reflect.set(target, key, value, receiver);
+    }
+});
+
+proxy.person.name = 'Bob'; // ❌ 不会触发 set！person 本身没变
+proxy.person = { name: 'Bob' }; // ✅ 触发 set（第一层）
+proxy.person.age = 31; // ❌ 不触发（嵌套对象的属性修改）
+```
+
+**解决方案 — 惰性递归代理（访问时才代理）：**
+
+```javascript
+function reactive(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj; // 基本类型直接返回，不代理
+    }
+
+    const proxyMap = new WeakMap(); // 缓存已代理的对象
+
+    function createReactive(target) {
+        // 避免重复代理
+        if (proxyMap.has(target)) {
+            return proxyMap.get(target);
+        }
+
+        const proxy = new Proxy(target, {
+            get(target, key, receiver) {
+                const value = Reflect.get(target, key, receiver);
+                // 递归代理：访问嵌套对象时自动代理
+                if (value !== null && typeof value === 'object') {
+                    return createReactive(value);
+                }
+                return value;
+            },
+            set(target, key, value, receiver) {
+                const oldValue = target[key];
+                const result = Reflect.set(target, key, value, receiver);
+                if (result && oldValue !== value) {
+                    console.log(`更新: ${String(key)} = ${JSON.stringify(value)}`);
+                    // 触发更新通知
+                    trigger(target, key);
+                }
+                return result;
+            }
+        });
+
+        proxyMap.set(target, proxy);
+        return proxy;
+    }
+
+    return createReactive(obj);
+}
+
+// 使用
+const state = reactive({
+    user: {
+        profile: {
+            name: 'Alice',
+            settings: { theme: 'dark' }
+        }
+    }
+});
+
+state.user.profile.name = 'Bob'; // ✅ 触发 set
+state.user.profile.settings.theme = 'light'; // ✅ 触发 set
+```
+
+**Vue3 reactive 的惰性代理策略：**
+
+```javascript
+// Vue3 源码简化版
+const proxyMap = new WeakMap();
+
+function reactive(obj) {
+    // 如果已被代理，直接返回
+    if (proxyMap.has(obj)) {
+        return proxyMap.get(obj);
+    }
+
+    const proxy = new Proxy(obj, {
+        get(target, key) {
+            const res = Reflect.get(target, key);
+            // 依赖收集（track）
+            track(target, key);
+            // 惰性代理：递归包装嵌套对象
+            if (isObject(res)) {
+                return reactive(res);
+            }
+            return res;
+        },
+        set(target, key, newValue) {
+            const oldValue = target[key];
+            const result = Reflect.set(target, key, newValue);
+            if (result && oldValue !== newValue) {
+                // 触发更新（trigger）
+                trigger(target, key, newValue, oldValue);
+            }
+            return result;
+        },
+        deleteProperty(target, key) {
+            const oldValue = target[key];
+            const result = Reflect.deleteProperty(target, key);
+            if (result) {
+                trigger(target, key, undefined, oldValue);
+            }
+            return result;
+        }
+    });
+
+    proxyMap.set(obj, proxy);
+    return proxy;
+}
+```
+
+**关键设计决策 — 惰性代理 vs 预代理：**
+
+```javascript
+// 预代理：创建时递归代理所有嵌套对象
+// 缺点：引用未使用的深层对象也会被代理，浪费内存
+
+// 惰性代理（Vue3 方案）：访问时才递归代理
+// 优点：按需代理，内存效率高
+// 缺点：首次访问有微小开销
+
+// 示例：惰性代理的好处
+const bigData = { deeply: { nested: { value: 123 } } };
+const proxy = reactive(bigData);
+// 此时 deep.nested.value 还没被代理
+const x = proxy.only.read; // 只有这个路径被代理
+// 节省了大量不必要的代理
+```
+
+#### 真实面试题
+
+**题目：Proxy 能够监听到对象中的对象的引用吗？**
+
+**满分答案：**
+
+**直接回答：不能。** `Proxy` 默认只能拦截第一层属性操作，嵌套对象的属性修改不会触发陷阱。
+
+**原因分析：**
+
+```javascript
+const obj = { outer: { inner: { value: 1 } } };
+const proxy = new Proxy(obj, {
+    set(target, key, value) {
+        console.log(`set ${key}`); // 只有这里触发
+        return Reflect.set(target, key, value);
+    }
+});
+
+proxy.outer = { inner: { value: 2 } }; // ✅ 触发（outer 引用变了）
+proxy.outer.inner.value = 3;           // ❌ 不触发
+// 因为 proxy.outer 获取到的是原始的 { inner: { value: 1 } }
+// 没有被 Proxy 包装，无法拦截
+```
+
+**解决方案：递归代理（惰性代理）：**
+
+```javascript
+const proxyMap = new WeakMap();
+
+function reactive(obj) {
+    if (proxyMap.has(obj)) return proxyMap.get(obj);
+
+    const proxy = new Proxy(obj, {
+        get(target, key, receiver) {
+            const value = Reflect.get(target, key, receiver);
+            // 惰性递归：访问嵌套对象时才代理
+            if (value !== null && typeof value === 'object') {
+                return reactive(value);
+            }
+            return value;
+        },
+        set(target, key, value, receiver) {
+            const result = Reflect.set(target, key, value, receiver);
+            if (result) {
+                console.log(`触发更新: ${String(key)} = ${value}`);
+                // 通知依赖
+            }
+            return result;
+        }
+    });
+
+    proxyMap.set(obj, proxy);
+    return proxy;
+}
+
+// 测试
+const state = reactive({ user: { address: { city: '北京' } } });
+state.user = { address: { city: '上海' } }; // ✅ 触发
+state.user.address.city = '深圳';          // ✅ 触发（递归代理生效）
+```
+
+**Vue3 reactive 的惰性代理策略：**
+
+Vue3 的 `reactive()` 正是采用这种惰性代理：
+1. 用 `WeakMap` 缓存已代理对象，避免重复代理（处理循环引用）
+2. `get` 时递归代理嵌套对象
+3. 首次访问深层属性时才会代理对应路径
+4. 不访问的属性不会被代理，节省内存
+
+---
+
+## 2.17 解构赋值对象
+
+#### 知识点详解
+
+数组解构要求被解构对象是可迭代的，对象没有 `Symbol.iterator`，因此不能直接用数组解构。
+
+**问题根源 — 为什么 `var [a, b] = { a: 1, b: 2 }` 失败？**
+
+```javascript
+// 数组解构本质是调用 Symbol.iterator
+const [a, b] = [1, 2]; // ✅ 数组有 iterator
+
+const obj = { a: 1, b: 2 };
+const iterator = obj[Symbol.iterator];
+console.log(iterator); // undefined ❌ 对象没有 iterator
+
+// 所以会报错：
+// TypeError: {(intermediate value)(intermediate value)} is not iterable
+```
+
+**解决方案一：正确使用对象解构（推荐）：**
+
+```javascript
+// ✅ 对象解构
+const { a, b } = { a: 1, b: 2 };
+console.log(a, b); // 1 2
+
+// ✅ 重命名
+const { a: first, b: second } = { a: 1, b: 2 };
+
+// ✅ 嵌套解构
+const { user: { name, age } } = { user: { name: 'Alice', age: 30 } };
+```
+
+**解决方案二：先转为数组再解构：**
+
+```javascript
+// Object.values — 获取所有值（按插入顺序）
+const [a, b] = Object.values({ a: 1, b: 2 });
+console.log(a, b); // 1 2
+
+// Object.entries — 获取键值对数组
+const [first, second] = Object.entries({ a: 1, b: 2 });
+const [key1, val1] = first;
+const [key2, val2] = second;
+
+// 只需要值时用 Object.values 更简洁
+```
+
+**解决方案三：给对象添加迭代器（不推荐但有趣）：**
+
+```javascript
+// 风险：不推荐修改 Object.prototype，会影响所有对象
+Object.prototype[Symbol.iterator] = function() {
+    const keys = Object.keys(this);
+    let index = 0;
+    return {
+        next: () => ({
+            done: index >= keys.length,
+            value: this[keys[index++]]
+        })
+    };
+};
+
+// 现在可以了（非常不推荐这样做）
+// const [a, b] = { a: 1, b: 2 }; // ❌ 不要这样做
+```
+
+**解决方案四：自定义迭代器（优雅方案）：**
+
+```javascript
+// 给特定对象添加迭代器
+function createIterableObj(obj) {
+    const entries = Object.entries(obj);
+    let index = 0;
+
+    return {
+        [Symbol.iterator]() {
+            return {
+                next() {
+                    if (index < entries.length) {
+                        return { done: false, value: entries[index++][1] };
+                    }
+                    return { done: true };
+                }
+            };
+        }
+    };
+}
+
+const iterObj = createIterableObj({ a: 1, b: 2 });
+const [a, b] = iterObj;
+console.log(a, b); // 1 2
+```
+
+**常见错误场景：**
+
+```javascript
+// ❌ 常见错误：数组解构对象
+const [name, age] = { name: 'Alice', age: 30 };
+// TypeError: {(intermediate value)(intermediate value)} is not iterable
+
+// ✅ 正确：对象解构
+const { name, age } = { name: 'Alice', age: 30 };
+
+// ✅ 正确：先转值
+const [name, age] = Object.values({ name: 'Alice', age: 30 });
+console.log(name, age); // 'Alice' 30
+```
+
+#### 真实面试题
+
+**题目：如何让 `var [a, b] = { a: 1, b: 2 }` 解构赋值成功？**
+
+**满分答案：**
+
+**报错原因：**
+数组解构依赖 `Symbol.iterator` 协议，要求被解构对象必须是一个可迭代对象。普通对象没有 `Symbol.iterator`，所以会抛出 `TypeError: {(intermediate value)} is not iterable`。
+
+**解决方案：**
+
+**方案一：使用对象解构（推荐，正确用法）**
+
+```javascript
+// ✅ 对象解构是正解
+var { a, b } = { a: 1, b: 2 };
+console.log(a, b); // 1 2
+```
+
+**方案二：先转数组再解构**
+
+```javascript
+// Object.values — 提取所有值
+var [a, b] = Object.values({ a: 1, b: 2 });
+console.log(a, b); // 1 2
+
+// Object.entries — 提取键值对（如果需要键名）
+var [[k1, a], [k2, b]] = Object.entries({ a: 1, b: 2 });
+console.log(a, b); // 1 2
+```
+
+**方案三：给 Object.prototype 添加迭代器（强烈不推荐）**
+
+```javascript
+// 风险：修改 Object.prototype 会影响所有普通对象
+// 迭代 for...of 时会产生意外行为
+Object.prototype[Symbol.iterator] = function() {
+    const keys = Object.keys(this);
+    let i = 0;
+    return {
+        next: () => ({
+            done: i >= keys.length,
+            value: this[keys[i++]]
+        })
+    };
+};
+
+// 现在这样做可以了（但强烈不推荐）
+var [a, b] = { a: 1, b: 2 };
+console.log(a, b); // 1 2
+```
+
+**方案四：自定义迭代器类（安全的做法）**
+
+```javascript
+function IterableObj(obj) {
+    this.obj = obj;
+}
+IterableObj.prototype[Symbol.iterator] = function() {
+    const keys = Object.keys(this.obj);
+    let i = 0;
+    return {
+        next: () => ({
+            done: i >= keys.length,
+            value: this.obj[keys[i++]]
+        })
+    };
+};
+
+const [a, b] = new IterableObj({ a: 1, b: 2 });
+console.log(a, b); // 1 2
+```
+
+**结论**：如果是业务需求，直接用对象解构 `{ a, b }`；如果必须用数组解构，先 `Object.values()` 转一下。永远不要改 `Object.prototype`。
+
+---
+
+## 2.18 作用域链
+
+#### 知识点详解
+
+作用域链是 JavaScript 查找变量的机制。当访问变量时，先在当前作用域查找，找不到则沿外层作用域逐级向上查找，直到全局作用域。
+
+**作用域链的查找过程：**
+
+```javascript
+const globalVar = 'global';
+
+function outer() {
+    const outerVar = 'outer';
+
+    function inner() {
+        const innerVar = 'inner';
+
+        console.log(innerVar);  // ✅ 就近找到 innerVar
+        console.log(outerVar);  // ✅ 沿作用域链找到 outerVar
+        console.log(globalVar); // ✅ 找到全局变量
+        console.log(nonExistent); // ❌ 沿链找完到 null，返回 ReferenceError
+    }
+
+    inner();
+}
+
+outer();
+```
+
+**作用域链的形成：**
+
+```javascript
+// 每个执行上下文有一个 [[Scope]] 属性（函数创建时确定）
+function outer() {
+    const a = 1;
+    function inner() {
+        console.log(a); // inner 的 [[Scope]] = [outer的AO, global]
+    }
+    return inner;
+}
+
+// 即使 outer 执行完毕，inner 函数依然持有 outer 的作用域引用
+const fn = outer();
+fn(); // 1，闭包机制
+```
+
+**词法作用域（静态作用域）vs 动态作用域：**
+
+```javascript
+// JavaScript 使用词法作用域（定义时确定，不是调用时）
+const x = 10;
+function f() {
+    console.log(x); // 打印定义处能看到的 x = 10
+}
+function g() {
+    const x = 20;
+    f(); // 10（不是 20！）因为 f 定义时就已经决定了引用的是外层的 x
+}
+g();
+
+// 动态作用域（少数语言如 Bash、Perl 某些场景）相反：
+// 打印调用栈上最近定义的 x → 20
+```
+
+**作用域链与闭包的关系：**
+
+```javascript
+// 闭包 = 函数 + 其定义时的作用域链
+function makeAdder(x) {
+    // x 在这里被创建，作用域链包含 x
+    return function(y) {
+        return x + y; // x 从闭包中捕获
+    };
+}
+
+const add5 = makeAdder(5);
+const add10 = makeAdder(10);
+
+add5(2);  // 7，x = 5 来自 add5 的闭包
+add10(2); // 12，x = 10 来自 add10 的闭包
+// 两个闭包各自持有独立的 x
+```
+
+**作用域链性能考量：**
+
+```javascript
+// 嵌套越深，查找越慢
+function level1() {
+    const l1 = 1;
+    function level2() {
+        const l2 = 2;
+        function level3() {
+            const l3 = 3;
+            function level4() {
+                console.log(l1); // 查找链：l4 → l3 → l2 → l1
+                console.log(l3); // 查找链：l4 → l3
+            }
+            level4();
+        }
+        level3();
+    }
+    level2();
+}
+
+// 优化：频繁访问的外层变量缓存到局部变量
+function optimized() {
+    const config = getGlobalConfig(); // 跨作用域查找
+
+    function handler() {
+        const cfg = config; // 一次性跨作用域查找
+        for (let i = 0; i < 1000; i++) {
+            cfg.method(); // 用局部变量访问，比每次跨作用域查找快
+        }
+    }
+}
+```
+
+#### 真实面试题
+
+**题目：什么是作用域链？**
+
+**满分答案：**
+
+**定义：**
+作用域链是 JavaScript 引擎用于解析变量引用的机制。当访问一个变量时，引擎从当前执行作用域开始，沿着 `[[Scope]]` 链接逐级向上查找，直到全局作用域，找到则返回，找不到则报 `ReferenceError`。
+
+**查找机制示意：**
+
+```javascript
+const global = '🌍';
+
+function A() {
+    const a = '📦';
+
+    function B() {
+        const b = '📦';
+
+        function C() {
+            console.log(a); // C → B的AO → A的AO → global
+            console.log(global); // C → global
+        }
+        C();
+    }
+    B();
+}
+A();
+```
+
+**词法作用域 vs 动态作用域：**
+
+JavaScript 采用**词法作用域（静态作用域）**，作用域在函数**定义**时确定，不受调用位置影响：
+
+```javascript
+const x = '全局';
+function foo() { console.log(x); }
+
+function bar() {
+    const x = '局部';
+    foo(); // 打印 '全局'，不是 '局部'
+}
+bar();
+```
+
+而动态作用域（如 Shell 的 `$0`）在**调用时**确定引用。
+
+**与闭包的关系：**
+闭包的本质就是函数携带了定义时的作用域链，使函数在定义作用域之外执行时仍能访问外层变量。
+
+**性能注意：**
+- 嵌套越深，变量查找越慢
+- 频繁访问的外层变量可缓存到局部变量
+
+---
+
+## 2.19 bind/call/apply 区别与实现
+
+#### 知识点详解
+
+`bind`、`call`、`apply` 都用于改变函数执行时的 `this` 指向，区别在于调用时机和传参方式。
+
+**三者对比：**
+
+| 方法 | 调用方式 | 传参形式 | 返回值 |
+|------|---------|---------|--------|
+| `call` | 立即执行 `fn.call(this, a, b)` | 逐个参数 | 函数返回值 |
+| `apply` | 立即执行 `fn.apply(this, [a, b])` | 数组参数 | 函数返回值 |
+| `bind` | 返回新函数 `const f = fn.bind(this, a)` | 逐个参数（可分次） | 新函数（稍后调用） |
+
+**基本使用：**
+
+```javascript
+const person = { name: 'Alice' };
+
+function greet(age, city) {
+    console.log(`I am ${this.name}, ${age} years old, from ${city}`);
+}
+
+greet.call(person, 25, '北京');   // 立即执行
+greet.apply(person, [25, '北京']);  // 立即执行，数组传参
+greet.bind(person, 25, '北京')(); // 返回新函数，需要手动调用
+greet.bind(person)(25, '北京');    // 分次传参
+```
+
+**手写实现 — 完整版 bind：**
+
+```javascript
+Function.prototype.myBind = function(thisArg, ...bindArgs) {
+    if (typeof this !== 'function') {
+        throw new TypeError('must be called on a function');
+    }
+
+    const originalFn = this;
+
+    function boundFn(...callArgs) {
+        // 关键点：使用 new 调用时，this 指向实例而非 thisArg
+        const newThis = this instanceof boundFn ? this : thisArg;
+        return originalFn.apply(newThis, [...bindArgs, ...callArgs]);
+    }
+
+    // 保持原型链
+    boundFn.prototype = Object.create(originalFn.prototype);
+
+    return boundFn;
+};
+
+// 测试
+function Point(x, y) {
+    this.x = x;
+    this.y = y;
+}
+Point.prototype.toString = function() {
+    return `${this.x},${this.y}`;
+};
+
+const YAxisPoint = Point.myBind(null, 0);
+const p = new YAxisPoint(5);
+console.log(p.toString()); // '0,5'
+console.log(p instanceof Point); // true
+```
+
+#### 真实面试题
+
+**题目：bind、call、apply 有什么区别？如何实现一个 bind？**
+
+**满分答案：**
+
+**三者对比表：**
+
+| 特性 | call | apply | bind |
+|------|------|-------|------|
+| 传参形式 | `fn.call(obj, a, b, c)` | `fn.apply(obj, [a, b, c])` | `fn.bind(obj, a, b)(c)` |
+| 执行时机 | 立即执行 | 立即执行 | 返回新函数（延迟执行） |
+| 返回值 | 函数返回值 | 函数返回值 | 新函数 |
+| 绑定 this | ✅ | ✅ | ✅ |
+| 预设部分参数 | ❌ | ❌ | ✅（柯里化） |
+
+**bind 完整实现（考虑 new）：**
+
+```javascript
+Function.prototype.myBind = function(thisArg, ...bindArgs) {
+    const fn = this;
+
+    function bound(...callArgs) {
+        // 关键：new 调用时，this 指向实例，应使用实例的 this
+        const newThis = this instanceof bound ? this : thisArg;
+        return fn.apply(newThis, [...bindArgs, ...callArgs]);
+    }
+
+    // 保证 instanceof 和 prototype 正确
+    bound.prototype = Object.create(fn.prototype);
+
+    return bound;
+};
+```
+
+**使用场景：**
+
+```javascript
+// call：需要立即执行且参数数量明确
+Array.prototype.slice.call({ 0: 'a', 1: 'b', length: 2 }); // ['a', 'b']
+
+// apply：参数是数组或不确定数量
+Math.max.apply(null, [3, 1, 4, 1, 5]); // 5
+Math.min.apply(null, [3, 1, 4, 1, 5]); // 1
+
+// bind：预设参数、事件处理、函数柯里化
+const log = console.log.bind(console); // 固定 this
+const fetchData = api.get.bind(api, '/users'); // 预设参数
+```
+
+---
+
+## 2.20 CommonJS 和 ES Module 区别
+
+#### 知识点详解
+
+CommonJS（`require`/`module.exports`）和 ES Module（`import`/`export`）是 JavaScript 的两种模块系统。
+
+**核心差异：**
+
+| 特性 | CommonJS (CJS) | ES Module (ESM) |
+|------|---------------|----------------|
+| 加载方式 | 运行时（动态） | 编译时（静态） |
+| 值拷贝 | 浅拷贝，输出值副本 | 引用绑定，动态同步 |
+| this 指向 | 当前模块对象 | undefined |
+| 导入位置 | 任意（条件导入） | 顶层（静态） |
+| 循环引用 | 可能拿到不完整值 | 支持但需小心 |
+| tree-shaking | 不支持 | 支持 |
+| 浏览器原生支持 | 不支持 | 支持 |
+
+**值拷贝 vs 引用绑定：**
+
+```javascript
+// CommonJS — 值拷贝
+// counter.js
+let count = 0;
+module.exports = { count, increment };
+
+// main.js
+const { count, increment } = require('./counter');
+console.log(count); // 0
+increment();
+console.log(count); // 0（副本，未变！）❌
+// 如果要同步，需要导出函数
+```
+
+```javascript
+// ES Module — 引用绑定
+// counter.mjs
+export let count = 0;
+export function increment() { count++; }
+
+// main.mjs
+import { count, increment } from './counter.mjs';
+console.log(count); // 0
+increment();
+console.log(count); // 1（实时同步）✅
+```
+
+**导入位置限制：**
+
+```javascript
+// CommonJS — 可以条件导入
+if (process.env.NODE_ENV === 'development') {
+    const logger = require('./dev-logger');
+} else {
+    const logger = require('./prod-logger');
+}
+
+// ES Module — 必须顶层导入（编译时确定）
+// ❌ 不允许
+// if (condition) import { a } from './a';
+// ✅ 正确
+import { a } from './a';
+if (condition) { /* 使用 a */ }
+```
+
+#### 真实面试题
+
+**题目：common.js 和 es6 中模块引入的区别？**
+
+**满分答案：**
+
+**核心差异（6个维度）：**
+
+| 维度 | CommonJS (require) | ES Module (import) |
+|------|-------------------|-------------------|
+| 加载方式 | **运行时动态加载** | **编译时静态分析** |
+| 值传递 | **值拷贝**（输出副本，模块内部修改不同步） | **引用绑定**（实时同步，模块内部修改外部可见） |
+| this 指向 | `module.exports` 对象 | `undefined` |
+| 导入位置 | 可在条件语句中（`if(process.env...`） | 必须顶层（静态） |
+| 循环引用 | 可能有 undefined 值 | 尽量避免，依赖声明顺序重要 |
+| tree-shaking | 不支持（难以静态分析） | 支持（基于 import/export） |
+
+**代码对比：**
+
+```javascript
+// CommonJS
+let count = 0;
+module.exports = { count };
+count = 1; // 外部不感知
+
+// ES Module
+export let count = 0;
+count = 1; // 外部实时感知（read-only binding）
+```
+
+**互操作注意事项：**
+
+```javascript
+// ESM 导入 CJS（只能默认导入）
+import React from 'react'; // React 是 CJS
+
+// CJS 不能直接 require ESM（用 await import()）
+const { default: ESM } = await import('./esm.mjs');
+```
+
+**实际选型建议**：
+- 库/框架：**ESM**（支持 tree-shaking，浏览器原生）
+- Node.js 后端：Node 14+ 同时支持两者
+- 打包项目：通常 ESM 入口更好，rollup/webpack 会做兼容处理
+
+---
+
+## 2.21 Vue3 响应式设计原理
+
+#### 知识点详解
+
+Vue3 的响应式系统基于 `Proxy`，相比 Vue2 的 `Object.defineProperty` 有根本性优势。
+
+**核心 API — reactive 和 ref：**
+
+```javascript
+// reactive — 深度代理对象
+const state = reactive({
+    user: { name: 'Alice', age: 30 }
+});
+state.user.name = 'Bob'; // ✅ 触发响应式更新
+
+// ref — 代理基本类型（通过 .value）
+const count = ref(0);
+count.value++; // ✅ 触发更新
+// 模板中自动解包 ref，不需要 .value
+```
+
+**Proxy 代理实现：**
+
+```javascript
+function reactive(obj) {
+    const proxyMap = new WeakMap();
+
+    function createReactive(obj) {
+        if (proxyMap.has(obj)) return proxyMap.get(obj);
+
+        const proxy = new Proxy(obj, {
+            get(target, key, receiver) {
+                const value = Reflect.get(target, key, receiver);
+                // 依赖收集
+                track(target, key);
+                // 惰性递归代理
+                if (value !== null && typeof value === 'object') {
+                    return createReactive(value);
+                }
+                return value;
+            },
+            set(target, key, newValue, receiver) {
+                const oldValue = target[key];
+                const result = Reflect.set(target, key, newValue, receiver);
+                if (result && oldValue !== newValue) {
+                    // 触发更新
+                    trigger(target, key, newValue, oldValue);
+                }
+                return result;
+            },
+            deleteProperty(target, key) {
+                const oldValue = target[key];
+                const result = Reflect.deleteProperty(target, key);
+                if (result) {
+                    trigger(target, key, undefined, oldValue);
+                }
+                return result;
+            }
+        });
+
+        proxyMap.set(obj, proxy);
+        return proxy;
+    }
+
+    return createReactive(obj);
+}
+```
+
+**依赖收集（track）和触发更新（trigger）：**
+
+```javascript
+// 正在执行的副作用函数
+let activeEffect = null;
+
+function track(target, key) {
+    if (activeEffect) {
+        // 建立 target.key → effect 的映射
+        const depsMap = getOrCreateDepMap(target);
+        const deps = getOrCreateSet(depsMap, key);
+        deps.add(activeEffect);
+        activeEffect.deps.push(deps);
+    }
+}
+
+function trigger(target, key, newValue, oldValue) {
+    // 找到所有依赖 target.key 的 effect，重新执行
+    const deps = getDeps(target, key);
+    deps.forEach(effect => effect.run());
+}
+```
+
+**与 Vue2 Object.defineProperty 对比：**
+
+| 特性 | Vue2 (defineProperty) | Vue3 (Proxy) |
+|------|----------------------|--------------|
+| 新增属性 | ❌ 需要 Vue.set | ✅ 直接支持 |
+| 删除属性 | ❌ 需要 Vue.delete | ✅ 支持 deleteProperty |
+| 数组下标 | ⚠️ 需特殊处理 | ✅ 直接支持 |
+| 性能 | 递归 defineProperty 较重 | 按需代理，更高效 |
+| 浏览器 API | 全部支持 | IE 不支持 |
+
+#### 真实面试题
+
+**题目：说说 Vue3 中的响应式设计原理**
+
+**满分答案：**
+
+**核心原理 — 基于 Proxy：**
+
+Vue3 使用 `Proxy` 代理整个对象，拦截 `get`（依赖收集）和 `set`（触发更新），实现数据变化驱动视图更新。
+
+**响应式流程：**
+
+```
+数据读取（get）
+    ↓
+track(target, key) → 收集当前 effect 到 Dep
+    ↓
+数据修改（set）
+    ↓
+trigger(target, key) → 通知 Dep 中的所有 effect 重新执行
+    ↓
+scheduler 批量调度 → 合并多次更新，异步更新 DOM
+```
+
+**关键代码实现：**
+
+```javascript
+// reactive — 代理对象
+const state = reactive({
+    user: { name: 'Alice', age: 30 }
+});
+
+// 等价于：
+const state = new Proxy({
+    user: { name: 'Alice', age: 30 }
+}, {
+    get(target, key) {
+        track(target, key);         // 依赖收集
+        const val = Reflect.get(target, key);
+        return isObject(val) ? reactive(val) : val; // 惰性递归
+    },
+    set(target, key, value) {
+        const result = Reflect.set(target, key, value);
+        trigger(target, key);        // 触发更新
+        return result;
+    }
+});
+
+// ref — 代理基本类型
+function ref(value) {
+    return {
+        get value() {
+            track(target, 'value');
+            return value;
+        },
+        set value(newVal) {
+            value = newVal;
+            trigger(target, 'value');
+        }
+    };
+}
+```
+
+**与 Vue2 的核心区别：**
+
+| 能力 | Vue2 | Vue3 |
+|------|------|------|
+| 新增属性响应式 | 需 `Vue.set` | ✅ 直接支持 |
+| 删除属性响应式 | 需 `Vue.delete` | ✅ 直接支持 |
+| 数组索引响应式 | ⚠️ 有限支持 | ✅ 完全支持 |
+| 惰性代理 | 不支持 | ✅ 惰性递归 |
+| 性能 | defineProperty 递归开销大 | 按需代理，更高效 |
+| IE 兼容 | ✅ 支持 | ❌ 不支持 |
+
+**reactive vs ref：**
+
+```javascript
+// reactive 用于对象（深度响应）
+const state = reactive({ count: 0 });
+state.count++;
+
+// ref 用于基本类型（包装为 .value 对象）
+const count = ref(0);
+count.value++;
+
+// 模板中 ref 自动解包，不需要 .value
+```
+
+---
+
+## 2.22 script 标签放在 header 和 body 底部
+
+#### 知识点详解
+
+`script` 标签的位置直接影响页面渲染行为和 DOM 可用性。
+
+**head 中的行为（阻塞渲染）：**
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- ❌ 脚本立即下载并执行，阻塞 HTML 解析 -->
+    <!-- 此时 DOM 还没构建，document.body === null -->
+    <script>
+        console.log(document.body); // null ❌
+        console.log(document.getElementById('app')); // null ❌
+    </script>
+</head>
+<body>
+    <div id="app">Hello</div>
+</body>
+</html>
+```
+
+**body 底部的行为（DOM 已就绪）：**
+
+```html
+<body>
+    <div id="app">Hello</div>
+    <script>
+        // ✅ DOM 已构建完毕，可以安全操作
+        console.log(document.getElementById('app')); // <div>Hello</div>
+    </script>
+</body>
+</html>
+```
+
+**现代最佳实践 — 使用 defer（head 中推荐）：**
+
+```html
+<head>
+    <!-- ✅ defer：不阻塞解析，DOM 解析完后执行 -->
+    <!-- 多个 defer 脚本按顺序执行 -->
+    <script defer src="vendor.js"></script>
+    <script defer src="app.js"></script>
+</head>
+<body>
+    <div id="app"></div>
+    <!-- ✅ DOMContentLoaded 之前脚本已执行 -->
+</body>
+```
+
+**async vs defer：**
+
+```html
+<script async src="analytics.js"></script>
+<!-- async：下载完立即执行，不阻塞解析，但也不保证顺序 -->
+<!-- 适合独立脚本（统计、广告等），不依赖 DOM -->
+
+<script defer src="app.js"></script>
+<!-- defer：下载不阻塞解析，DOM 解析完后按顺序执行 -->
+<!-- 适合需要 DOM 的业务脚本 -->
+```
+
+**type="module" 默认等于 defer：**
+
+```html
+<!-- type="module" 始终默认 defer，不阻塞 -->
+<script type="module" src="module.js"></script>
+<!-- 可以用 async 改为下载完立即执行 -->
+<script type="module" src="module.js" async></script>
+```
+
+#### 真实面试题
+
+**题目：script 标签放在 header 里和放在 body 底部里有什么区别？**
+
+**满分答案：**
+
+**从 JS 执行角度的核心区别：**
+
+| 位置 | HTML 解析 | DOM 是否就绪 | DOM 操作 | 推荐度 |
+|------|-----------|------------|---------|--------|
+| `head`（同步） | 被阻塞 | ❌ 未构建 | ❌ 不能操作 | ❌ 避免 |
+| `head` + `defer` | 不阻塞 | ✅ 解析完后 | ✅ 可以操作 | ✅ 推荐 |
+| `head` + `type="module"` | 不阻塞（默认 defer） | ✅ 解析完后 | ✅ 可以操作 | ✅ 推荐 |
+| `body` 底部 | 完全解析后 | ✅ 就绪 | ✅ 可以操作 | ✅ 可接受 |
+
+**具体行为：**
+
+```html
+<!-- head 中同步脚本（不推荐） -->
+<head>
+    <script>
+        console.log(document.body); // null ❌
+        // DOM 还没构建，不能操作 DOM
+    </script>
+</head>
+
+<!-- body 底部（可接受） -->
+<body>
+    <div id="app">Hello</div>
+    <script>
+        console.log(document.getElementById('app')); // ✅ <div>
+        // DOM 已完整构建
+    </script>
+</body>
+</html>
+```
+
+**现代最佳实践：**
+
+```html
+<!-- 推荐：defer 在 head 中 -->
+<head>
+    <script defer src="bundle.js"></script>
+    <!-- defer 特点：下载不阻塞解析，DOM 解析完后按顺序执行 -->
+</head>
+
+<!-- 独立脚本可用 async -->
+<head>
+    <script async src="analytics.js"></script>
+    <!-- async：下载完立即执行，不保证顺序 -->
+</head>
+```
+
+**结论**：同步脚本放 `body` 底部是历史做法，`defer` 是现代标准推荐方案。
+
+---
+
+## 2.23 Vue 中 age 值变化问题分析
+
+#### 知识点详解
+
+Vue 响应式失效是常见陷阱，主要原因是对响应式对象的操作方式不正确。
+
+**陷阱一：直接修改非响应式变量（data 外）：**
+
+```javascript
+export default {
+    data() {
+        return {
+            age: 25 // ✅ 在 data 中声明，是响应式的
+        };
+    },
+    mounted() {
+        // ✅ 正确方式
+        this.age = 30;
+        // 或用 this.$set
+        this.$set(this, 'age', 30);
+
+        // ❌ 常见错误：试图通过解构破坏响应式
+        const { age } = this; // age 是原始值，非响应式代理
+        age = 30; // ❌ 不会触发视图更新
+    }
+};
+```
+
+**陷阱二：连续多次修改基本类型（ref）：**
+
+```javascript
+import { ref } from 'vue';
+
+// ✅ 正确方式：ref 包装的值要通过 .value 修改
+const age = ref(25);
+age.value++;
+age.value++;
+age.value++; // 最终 28
+
+// ❌ 错误做法：ref 不加 .value
+age++; // ❌ 无效
+
+// ❌ 在同一个同步代码块中多次修改
+age.value = 25;
+age.value = 26;
+age.value = 27;
+// ⚠️ Vue3 会合并这些更新为一次，视图只更新到 27
+```
+
+**陷阱三：修改数组通过索引（Vue2）：**
+
+```javascript
+// Vue2 中数组通过索引赋值不是响应式的
+this.items[0] = newValue;  // ❌ 不触发更新
+this.items.length = 0;     // ❌ 不触发更新
+
+// ✅ 正确做法
+this.$set(this.items, 0, newValue); // Vue2
+this.items.splice(0, 1, newValue);   // ✅ splice 是响应式的
+// Vue3 中直接通过索引赋值是响应式的 ✅
+```
+
+#### 真实面试题
+
+**题目：下面代码中，点击"+3"按钮后，age 的值是什么？**
+
+```javascript
+// Vue3 Composition API 示例
+import { ref } from 'vue';
+export default {
+    setup() {
+        const age = ref(25); // ✅ 正确：ref 包装
+        const increment = () => age.value++;
+        return { age, increment };
+    }
+    // template: <button @click="age++; age++; age++;">+3</button>
+};
+```
+
+**满分答案：**
+
+**关键分析：**
+
+1. **是否正确使用响应式 API？**
+   - 基本类型 → 是否有 `ref()`
+   - 对象类型 → 是否有 `reactive()` 或 `ref()`
+
+2. **ref 是否正确使用 `.value`？**
+   - `<script setup>` 中模板自动解包，模板里不需要 `.value`
+   - `<script>` 中必须用 `.value`
+
+3. **Vue2 vs Vue3 行为差异？**
+   - Vue2 中数组索引赋值不响应
+   - Vue3 中数组索引赋值是响应的
+
+**分析：**
+
+```javascript
+// 模板中连续修改 ref
+<button @click="age++; age++; age++;">+3</button>
+
+// Vue3 行为：微任务批处理
+// 同步执行 age.value++ 三次（内存值为 28）
+// 然后异步合并为一次 DOM 更新
+// 最终视图显示 age = 28
+```
+
+**响应式陷阱常见原因：**
+
+| 陷阱 | 错误写法 | 正确写法 |
+|------|---------|---------|
+| 基本类型不用 ref | `let age = 25;` | `const age = ref(25);` |
+| 解构丢失响应式 | `const { age } = state;` | 直接用 `state.age` |
+| 数组索引（Vue2） | `arr[i] = val` | `arr.splice(i, 1, val)` |
+| 箭头函数代替普通函数 | `methods: { add: () => {} }` | `methods: { add() {} }` |
+
+**结论**：正确使用 `ref` 时，点击 "+3" 后 `age.value` = 28，视图显示 28。
+
+---
+
+## 2.24 Vue created 和 mounted 时间差
+
+#### 知识点详解
+
+`created` 和 `mounted` 是 Vue 组件生命周期钩子，两者的主要区别在于 DOM 是否可用。
+
+**执行时机：**
+
+```javascript
+// Vue 生命周期简化流程：
+// beforeCreate → created → (编译模板) → beforeMount → mounted → ...
+//                                                        ↑
+//                                                  created 到这里的时间差
+```
+
+**created 阶段：**
+- 组件实例已创建
+- data、computed、methods、watch 已设置
+- **DOM 不可用**（模板未编译/挂载）
+- 适合：数据初始化、网络请求（SSR 中也可用）
+
+**mounted 阶段：**
+- 组件模板已挂载到真实 DOM
+- `$el`、`$refs` 已可用
+- **DOM 已就绪**
+- 适合：DOM 操作、第三方库初始化、滚动/动画
+
+**两者之间发生了什么：**
+
+```javascript
+// created 之后 → mounted 之前
+// 1. 如果是运行时编译（没有 vue-loader 的 compile）：
+//    将模板编译成 render 函数
+//    （使用 template 选项时需要编译，render 函数不需要）
+
+// 2. 创建 VDOM（虚拟 DOM）
+
+// 3. patch（将 VDOM 渲染到真实 DOM）
+
+// 4. 触发子组件的 mounted 钩子
+//    父组件 mounted 等待所有同步子组件 mounted 完成
+//    （异步组件不等待）
+
+// 5. 执行 $nextTick 中的回调
+```
+
+**时间差的影响因素：**
+
+```javascript
+// 因素1：模板复杂度
+// 模板越复杂，编译时间越长，created → mounted 时间差越大
+// 使用 render 函数或 .vue 文件（预编译）可避免运行时编译
+
+// 因素2：子组件数量
+// 父组件的 mounted 需要等待同步子组件全部 mounted 后才触发
+// 异步子组件不阻塞父组件的 mounted
+
+// 因素3：DOM 操作复杂度
+// 大量 DOM 操作会延长 patch 时间
+
+// 因素4：浏览器性能
+// CPU/GPU 性能越好，时间差越小
+```
+
+**代码示例：**
+
+```javascript
+export default {
+    data() {
+        return { items: [] };
+    },
+    created() {
+        // ✅ 可以发送请求
+        fetch('/api/data').then(r => r.json()).then(data => {
+            this.items = data;
+        });
+
+        // ❌ 不能操作 DOM
+        console.log(this.$refs.box); // undefined
+    },
+    mounted() {
+        // ✅ DOM 已就绪，可以操作
+        console.log(this.$refs.box); // <div ref="box"></div>
+        this.initChart(); // 初始化图表库
+        this.scrollToTop(); // 滚动到顶部
+    }
+};
+```
+
+#### 真实面试题
+
+**题目：Vue 中，created 和 mounted 两个钩子之间调用时间差值受什么影响？**
+
+**满分答案：**
+
+**两者之间的执行流程：**
+
+```
+created ✅
+    ↓
+模板编译（运行时编译时）
+    ↓
+创建虚拟 DOM
+    ↓
+子组件 created → mounted（同步子组件）
+    ↓
+patch（VDOM → 真实 DOM）
+    ↓
+mounted ✅
+```
+
+**影响时间差的因素：**
+
+| 因素 | 影响说明 |
+|------|---------|
+| **模板复杂度** | 运行时编译（`template` 选项）耗时；预编译（`render` 函数）跳过此步 |
+| **组件树深度** | 深度越深，子孙组件的 `created/mounted` 越多，父组件 `mounted` 越晚触发 |
+| **DOM 操作复杂度** | patch 阶段渲染的 DOM 越多，时间越长 |
+| **异步组件数量** | 异步组件不阻塞 `mounted`；同步组件全部完成后才触发父 `mounted` |
+| **浏览器性能** | CPU/GPU 越快，编译 + patch 越快 |
+
+**最佳实践：**
+
+```javascript
+// ✅ 数据请求 → 放 created（更早发起）
+created() {
+    this.fetchUser();
+    this.initLogic();
+}
+
+// ✅ 需要 DOM 的操作 → 必须放 mounted
+mounted() {
+    this.$refs.chart.init();
+    new ThirdPartyLib(this.$el);
+    document.addEventListener('scroll', this.onScroll);
+}
+
+// ✅ 两者都可以的（轻量初始化）
+created() {
+    this.timer = setInterval(...); // 定时器两边都可以
+}
+```
+
+**Vue3 组合式 API 对应关系：**
+
+```javascript
+// created → setup()（setup 在 created 之前执行）
+// mounted  → onMounted()
+
+import { onMounted } from 'vue';
+
+setup() {
+    // 等价于 created
+    console.log('setup (类似 created)');
+    onMounted(() => {
+        // 等价于 mounted
+        console.log('mounted');
+    });
+}
+```
+

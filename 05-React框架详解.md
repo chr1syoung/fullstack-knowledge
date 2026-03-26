@@ -1862,3 +1862,1395 @@ function OptimizedAIMessage({ content }) {
 
 ---
 
+## 5.5 React Portals
+
+### 5.5.1 Portal 渲染与事件冒泡机制
+
+#### 知识点详解
+
+**React Portals（传送门）：**
+
+Portal 将子节点渲染到父组件 DOM 层级之外的 DOM 节点。使用 `ReactDOM.createPortal(child, container)` API。
+
+```jsx
+import ReactDOM from 'react-dom';
+
+// 基本用法
+function Modal({ children }) {
+    return ReactDOM.createPortal(
+        children,
+        document.body  // 挂载到 body 下
+    );
+}
+
+// 典型场景：模态框
+function App() {
+    const [showModal, setShowModal] = useState(false);
+
+    return (
+        <div className="app">
+            <h1>App Content</h1>
+            <button onClick={() => setShowModal(true)}>打开弹窗</button>
+
+            {showModal && (
+                <Modal>
+                    <div className="modal-overlay" onClick={() => setShowModal(false)}>
+                        <div className="modal-content" onClick={e => e.stopPropagation()}>
+                            <h2>模态框</h2>
+                            <p>这里的内容渲染在 body 下</p>
+                            <button onClick={() => setShowModal(false)}>关闭</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+}
+```
+
+**三个典型使用场景：**
+
+```jsx
+// 场景1：模态框/对话框（避免 overflow:hidden 裁剪）
+// 父组件有 overflow: hidden 时，普通渲染会被裁剪
+// Portal 渲染到 body，脱离父组件的 CSS 限制
+
+// 场景2：Tooltip/弹出层（避免 z-index 层级问题）
+// 当父组件 z-index 很大时，内部弹出层可能被遮挡
+// Portal 渲染到 body，独立的层叠上下文
+
+// 场景3：全局 Loading 遮罩
+function GlobalLoading() {
+    return ReactDOM.createPortal(
+        <div className="global-loading">
+            <Spinner />
+        </div>,
+        document.body
+    );
+}
+
+// 自定义 Portal Hook
+function usePortal() {
+    const [portalEl, setPortalEl] = useState(null);
+
+    useEffect(() => {
+        const el = document.createElement('div');
+        el.className = 'portal-container';
+        document.body.appendChild(el);
+        setPortalEl(el);
+
+        return () => {
+            document.body.removeChild(el);
+        };
+    }, []);
+
+    return (children) => {
+        if (!portalEl) return null;
+        return ReactDOM.createPortal(children, portalEl);
+    };
+}
+```
+
+**事件冒泡机制（核心要点）：**
+
+> Portal 中的事件仍然会冒泡到 React 组件树中的父组件（而不是 DOM 树）。
+
+```jsx
+// 关键点：事件冒泡基于 React 组件树，而非 DOM 树
+function Parent() {
+    const handleClick = () => {
+        console.log('父组件捕获到点击');
+    };
+
+    return (
+        <div onClick={handleClick}>
+            <h1>父组件</h1>
+            {/* Portal 渲染到 body，但事件仍然冒泡到父组件 */}
+            <Portal>
+                <button>Portal 内的按钮</button>
+            </Portal>
+        </div>
+    );
+}
+
+// 验证：点击 Portal 内的按钮，控制台输出 "父组件捕获到点击"
+// 这是 React 有意为之的设计决策
+```
+
+```jsx
+// 阻止 Portal 事件的特殊处理
+function PortalWithEvent() {
+    return ReactDOM.createPortal(
+        <div
+            onClick={e => {
+                e.stopPropagation();  // 阻止冒泡到 React 组件树
+                e.nativeEvent.stopImmediatePropagation();  // 阻止冒泡到 DOM
+            }}
+        >
+            点击这里不会冒泡
+        </div>,
+        document.body
+    );
+}
+```
+
+#### 真实面试题
+
+**题目：React Portals 有什么用？**
+
+**满分答案：**
+
+**1. API 用法：**
+
+```jsx
+ReactDOM.createPortal(child, container);
+// child: 要渲染的 React 节点
+// container: DOM 元素，作为 Portal 的挂载目标
+```
+
+**2. 三个典型使用场景：**
+
+- **模态框/对话框**：渲染到 body 下，避免被父元素的 `overflow: hidden` 裁剪
+- **Tooltip/弹出层**：脱离父组件的层叠上下文，避免 z-index 层级问题
+- **全局 Loading 遮罩**：全局覆盖层，不受任何父组件样式影响
+
+**3. 事件冒泡机制（最重要）：**
+
+> Portal 中的事件**仍然会冒泡到 React 组件树**中的父组件，而不是 DOM 树。
+
+- DOM 节点在 body 下（或其他容器）
+- 但在 React 虚拟 DOM 树中，它仍然是父组件的子节点
+- 所以 `onClick` 等事件会沿着组件树冒泡
+- 这是 React 有意为之的设计，便于在父组件中统一处理 Portal 内的事件
+
+---
+
+## 5.6 React 和 ReactDOM 的关系
+
+### 5.6.1 核心库与渲染器的职责分离
+
+#### 知识点详解
+
+**职责划分：**
+
+| 包 | 职责 |
+|---|------|
+| `react` | 核心库：提供 React API（createElement、Component、Hooks、虚拟 DOM diff 算法） |
+| `react-dom` | 渲染器：将虚拟 DOM 渲染到真实 DOM（浏览器环境） |
+
+```jsx
+// react 核心 API
+import React from 'react';
+const element = React.createElement('div', { id: 'app' }, 'Hello');
+const Component = React.Component;
+const { useState, useEffect } = React;
+```
+
+```jsx
+// react-dom 渲染 API
+import ReactDOM from 'react-dom';
+ReactDOM.render(element, document.getElementById('root'));
+
+// React 18
+import { createRoot } from 'react-dom/client';
+const root = createRoot(document.getElementById('root'));
+root.render(<App />);
+```
+
+**分离原因（跨平台设计）：**
+
+```jsx
+// React 核心只定义组件模型和协调算法
+// 具体如何渲染，由渲染器决定
+
+// react-dom: 浏览器/服务端渲染
+import ReactDOM from 'react-dom/client';
+import ReactDOMServer from 'react-dom/server';
+
+// react-native: 移动端
+// import ReactNative from 'react-native';
+
+// react-three-fiber: 3D 渲染
+// import { Canvas } from '@react-three/fiber';
+
+// react-pdf: PDF 渲染
+// import { pdf } from '@react-pdf/renderer';
+
+// react-skia: Canvas/Skia 渲染
+// import { Canvas } from '@react-canvas/react';
+```
+
+**React 18 的包拆分：**
+
+```jsx
+// React 18 之前
+// react-dom: 同时包含 client 和 server
+
+// React 18 拆分
+// react-dom: 客户端渲染核心
+import { createRoot, hydrateRoot } from 'react-dom';
+
+// react-dom/client: 客户端 API
+import { createRoot } from 'react-dom/client';
+
+// react-dom/server: 服务端渲染 API
+import ReactDOMServer from 'react-dom/server';
+
+// 服务端渲染方式对比
+// renderToString: 同步字符串渲染（简单场景）
+const html = ReactDOMServer.renderToString(<App />);
+
+// renderToPipeableStream: Node.js 流式渲染（生产环境推荐）
+const stream = ReactDOMServer.renderToPipeableStream(<App />, {
+    onShellReady: () => { /* 流开始 */ },
+    onAllReady: () => { /* 所有内容完成 */ },
+    onError: (err) => { /* 错误处理 */ }
+});
+
+// renderToReadableStream: Web Streams（Edge/Cloudflare Workers）
+const stream = await ReactDOMServer.renderToReadableStream(<App />);
+```
+
+#### 真实面试题
+
+**题目：react 和 react-dom 是什么关系？**
+
+**满分答案：**
+
+**1. 职责分离：**
+
+- **`react`**：核心库，包含 React 的核心逻辑——`createElement`、`Component`、`Hooks`、虚拟 DOM 的创建和 diff 算法。它定义了组件模型和协调机制，但**不关心**如何渲染。
+- **`react-dom`**：渲染器，专门负责将 React 的虚拟 DOM 渲染到真实 DOM（浏览器环境），提供 `render`、`createRoot` 等 API。
+
+**2. 跨平台设计理念：**
+
+分离的核心目的是**跨平台**。React 核心只定义"组件是什么"和"如何协调"，具体的渲染方式由各个平台的渲染器决定：
+
+- `react-dom` → 浏览器
+- `react-native` → iOS/Android 原生控件
+- `react-three-fiber` → Three.js 3D 渲染
+- `react-pdf` → PDF 文档
+- `react-skia` → Skia Canvas 绑制
+
+这样一份 React 代码，可以跑在各种平台上。
+
+**3. React 18 的包拆分：**
+
+React 18 将 `react-dom` 进一步拆分为：
+- `react-dom/client` → 客户端渲染（`createRoot`、`hydrateRoot`）
+- `react-dom/server` → 服务端渲染（`renderToString`、`renderToPipeableStream`）
+
+这样可以让服务端渲染代码和客户端代码完全隔离，减小打包体积。
+
+---
+
+## 5.7 requestIdleCallback 与 React 调度器
+
+### 5.7.1 React 为什么自建调度器而非直接使用 requestIdleCallback
+
+#### 知识点详解
+
+**requestIdleCallback 的问题：**
+
+```javascript
+// requestIdleCallback：在浏览器空闲时执行低优先级任务
+requestIdleCallback((deadline) => {
+    // deadline.timeRemaining() — 剩余空闲时间
+    // deadline.didTimeout — 是否超时
+    while (deadline.timeRemaining() > 0 && tasks.length > 0) {
+        doNextTask(tasks.shift());
+    }
+});
+```
+
+**三个致命问题：**
+
+```javascript
+// 问题1：兼容性差（Safari 完全不支持）
+// Safari 从未实现 requestIdleCallback
+// 如果直接使用，需要自己 polyfill setTimeout
+
+// 问题2：优先级低，可能永远不执行
+// 浏览器空闲时间可能不足，导致回调被无限延迟
+// 没有足够的空闲时间时，浏览器不会调用你的回调
+
+// 问题3：执行频率不确定
+// 可能是每帧都执行，也可能是每 20 帧才执行一次
+// 无法保证任务能在合理时间内完成
+```
+
+**React 的解决方案——Scheduler（调度器）：**
+
+```javascript
+// React 自研 Scheduler，核心策略：
+// 1. 优先使用 MessageChannel（宏任务，在每一帧结束后执行）
+// 2. 回退到 setTimeout(0)
+
+// MessageChannel 方案
+const channel = new MessageChannel();
+channel.port1.onmessage = function(event) {
+    // 在当前任务完成后、下一次渲染前执行
+    // 比 setTimeout 更早执行
+};
+channel.port2.postMessage(null);
+
+// 调度逻辑（伪代码）
+function scheduleCallback(callback) {
+    const startTime = performance.now();
+    const timeout = 5000;  // 任务超时时间
+
+    // 使用 MessageChannel
+    channel.port2.postMessage(null);
+
+    // 如果超时，fallback 到 setTimeout
+    return setTimeout(() => {
+        callback({
+            timeRemaining: () => Math.max(0, 50 - (performance.now() - startTime)),
+            didTimeout: false
+        });
+    }, 0);
+}
+```
+
+**lane 优先级系统（React 18）：**
+
+```javascript
+// React 用 lane（车道）模型管理优先级
+// 不同更新有不同的"车道"，高优先级可以中断低优先级
+
+// 车道定义（简化）
+const SyncLane = 0b0000000000000000000000000000001;      // 同步优先级（最高）
+const InputContinuousLane = 0b0000000000000000000000000000100;  // 用户输入
+const DefaultLane = 0b0000000000000000000000000100000;  // 默认
+const TransitionLane = 0b0000000000000000000001000000000; // startTransition
+const IdleLane = 0b0000000000000000001000000000000;    // 空闲（最低）
+
+// 调度过程
+// 1. 用户点击 → SyncLane → 立即调度
+// 2. startTransition → TransitionLane → 低优先级，可被中断
+// 3. 数据加载 → DefaultLane → 中等优先级
+
+// 高优先级打断低优先级
+function handleUserClick() {
+    // 这是 SyncLane，优先级最高
+    setCount(c => c + 1);  // 打断当前的 TransitionLane 任务
+}
+
+startTransition(() => {
+    // 这是 TransitionLane，优先级较低
+    setQuery(input);  // 被上面的 SyncLane 打断
+});
+```
+
+#### 真实面试题
+
+**题目：React 中为什么不直接使用 requestIdleCallback？**
+
+**满分答案：**
+
+**requestIdleCallback 的三个问题：**
+
+1. **兼容性差**：Safari 完全不支持，需要额外 polyfill
+2. **优先级不可控**：如果浏览器没有足够空闲时间，回调可能永远不执行，无法满足 React 对任务完成时间的严格要求
+3. **执行频率不稳定**：可能在下一帧执行，也可能 20 帧后才执行，React 无法依赖它的时序
+
+**React Scheduler 的替代方案：**
+
+React 自己实现了调度器，核心策略是：
+- **优先使用 MessageChannel**：在当前任务完成后、下一次渲染前执行，比 `setTimeout(0)` 更及时
+- **回退到 setTimeout(0)`**：如果 MessageChannel 不可用
+
+这样既保证了兼容性，又保证了任务调度的及时性。
+
+**lane 优先级系统（React 18）：**
+
+React 18 引入了 lane（车道）模型来管理更新优先级：
+
+- **SyncLane**：同步优先级（用户点击、输入），立即执行
+- **TransitionLane**：`startTransition` 的更新，低优先级，可被高优先级打断
+- **IdleLane**：空闲时执行
+
+核心思想：**高优先级任务（如用户输入）可以中断低优先级任务（如大规模渲染）**，保证 UI 响应性。
+
+---
+
+## 5.8 Fiber 架构
+
+### 5.8.1 为什么 React 需要 Fiber 而 Vue 不需要
+
+#### 知识点详解
+
+**React Fiber 的本质：**
+
+```javascript
+// Fiber 节点数据结构
+{
+    type: 'div',           // 元素类型
+    key: null,             // key
+    stateNode: domNode,    // 对应的真实 DOM 节点
+
+    // 树结构（三叉链表）
+    return: parentFiber,   // 父节点
+    child: childFiber,     // 第一个子节点
+    sibling: siblingFiber, // 下一个兄弟节点
+
+    // 工作相关
+    pendingProps: {},       // 新的 props
+    memoizedProps: {},      // 旧的 props
+    memoizedState: {},      // 组件内部 state
+
+    // 副作用
+    effectTag: 'UPDATE',    // 需要执行的副作用类型
+    nextEffect: nextFiber,  // 下一个有副作用的节点
+
+    // 优先级
+    lanes: 0b0001,          // 车道/优先级
+    childLanes: 0b0001      // 子树优先级
+}
+```
+
+**React 为什么需要 Fiber：**
+
+```javascript
+// React 的数据模型：不可变数据 + 单向数据流
+// 每次 state 变化，从根组件开始重新渲染整个子树
+
+// 问题：大型应用可能有数万个 Fiber 节点
+// 如果同步遍历所有节点，主线程被阻塞，导致：
+// - 动画卡顿（掉了帧）
+// - 用户输入无响应
+// - 点击延迟
+
+// Fiber 的解决方案：分片执行
+function workLoop(deadline) {
+    while (nextUnitOfWork && deadline.timeRemaining() > 0) {
+        nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+        // 每个节点处理完后，检查是否还有剩余时间
+        // 如果时间用完，让出主线程
+    }
+
+    if (nextUnitOfWork) {
+        // 没有时间了，等下一帧继续
+        requestIdleCallback(workLoop);
+    } else {
+        // 所有工作完成，进入 Commit 阶段
+        commitRoot();
+    }
+}
+```
+
+**Vue 为什么不需要 Fiber：**
+
+```javascript
+// Vue 的响应式系统：Proxy + 依赖追踪
+// Vue 精确知道哪些组件依赖了哪些数据
+
+// 当 count 变化时，只有直接使用 count 的组件会更新
+const count = ref(0);
+
+// ComponentA 使用了 count
+const ComponentA = {
+    setup() {
+        const c = count.value;  // 建立了依赖关系
+        return () => <div>{c}</div>;
+    }
+};
+
+// ComponentB 没有使用 count
+// count 变化时，ComponentB 完全不会参与渲染
+
+// Vue3 编译时优化
+// <template>
+//   <div>
+//     <span>{{ msg }}</span>        // 静态，提升后不重复创建
+//     <span>{{ obj.name }}</span>  // 动态，需要追踪
+//   </div>
+// </template>
+
+// 编译产物分析：
+// 1. 静态节点提升：只创建一次，不参与 diff
+// 2. 动态节点标记（PatchFlag）：只比较标记的节点
+// 3. 作用域插槽优化：减少不必要的更新
+```
+
+**本质区别：**
+
+```javascript
+// React 的设计哲学：
+// "给我一个全新的状态，我帮你渲染整个 UI"
+// 优点：简单、符合直觉、易于理解
+// 缺点：大型应用中，每次更新都重新评估所有组件
+
+// Vue 的设计哲学：
+// "告诉我什么变了，我只更新需要变的地方"
+// 优点：精确更新，性能好
+// 缺点：需要维护依赖追踪系统
+
+// 对比示意：
+// 数据变化时：
+// React: 触发协调 → diff 算法 → 找出最小更新
+// Vue:  Proxy 拦截 → 精确通知依赖的组件 → 只更新这些组件
+
+// 两者各有取舍，React 通过 Fiber + 并发模式追赶性能差距
+```
+
+#### 真实面试题
+
+**题目：为什么 React 需要 Fiber 架构，而 Vue 却不需要？**
+
+**满分答案：**
+
+**React Fiber 要解决的问题：**
+
+React 的核心特点是**不可变数据 + 单向数据流 + 完整子树重渲染**：
+
+1. `setState` 后，从根组件开始遍历整个组件树
+2. 每个组件的 `render` 方法都会被调用（即使 props 没变）
+3. 生成新的虚拟 DOM 树，通过 diff 算法找出最小更新
+
+在 React 15 的 Stack Reconciler 中，这个过程是**同步且不可中断**的。当应用有上万个组件时，更新可能需要几百毫秒，导致主线程被阻塞，动画掉帧、用户输入无响应。
+
+Fiber 的解决方案：**把渲染工作拆分成小的执行单元（Fiber 节点），每个单元处理完后可以暂停、让出主线程，等下一帧再继续**。配合优先级调度，高优先级的更新（用户点击）可以打断低优先级的更新。
+
+**Vue 为什么不需要：**
+
+Vue 使用了**细粒度的响应式系统**：
+
+1. 基于 `Proxy`（Vue3）或 `Object.defineProperty`（Vue2）实现依赖追踪
+2. 每个组件精确知道自己依赖了哪些数据
+3. 数据变化时，**只有直接使用该数据的组件才需要更新**，不需要遍历整个树
+
+此外，Vue3 通过编译时优化（静态提升、PatchFlag 补丁标记），进一步减少了运行时需要比较的节点数量。
+
+**两者设计哲学差异：**
+
+| | React | Vue |
+|---|---|---|
+| 数据模型 | 不可变（Immutable） | 可变（Reactive） |
+| 更新方式 | 完整重新渲染 + diff | 精确追踪 + 局部更新 |
+| 架构选择 | 用 Fiber 实现可中断渲染 | 用响应式追踪避免不必要渲染 |
+| 本质 | "给你新状态，帮我渲染" | "告诉我什么变了，只更新它" |
+
+两者选择不同的路径，但都在向彼此学习——React 18 的并发模式借鉴了精确更新的思路，Vue3 的编译优化也吸收了 React 的协调思想。
+
+---
+
+## 5.9 Portal 事件冒泡
+
+### 5.9.1 子组件是 Portal 时事件能否冒泡到父组件
+
+#### 知识点详解
+
+**答案：能。**
+
+这是 React 刻意设计的行为。Portal 中的事件在 React 组件树层面冒泡，而非 DOM 树层面。
+
+```jsx
+import ReactDOM from 'react-dom';
+
+function Parent() {
+    const handleClick = (e) => {
+        console.log('父组件捕获到点击');
+        console.log('e.currentTarget:', e.currentTarget); // 指向父组件 DOM
+        console.log('e.target:', e.target); // 指向 Portal 内的实际 DOM
+    };
+
+    return (
+        <div onClick={handleClick} style={{ padding: 20, background: '#eee' }}>
+            <h2>父组件</h2>
+            <p>点击下方 Portal 按钮，事件会冒泡到这里</p>
+
+            {/* Portal 渲染到 body，但事件仍会冒泡到父组件 */}
+            <MyPortal>
+                <button>Portal 内按钮</button>
+            </MyPortal>
+        </div>
+    );
+}
+
+function MyPortal({ children }) {
+    return ReactDOM.createPortal(children, document.body);
+}
+
+// 验证流程：
+// 1. 点击 "Portal 内按钮"
+// 2. 事件在 DOM 树中冒泡到 body（因为 Portal 的 DOM 节点在 body 下）
+// 3. 同时在 React 组件树中冒泡到 Parent
+// 4. Parent 的 onClick 被触发
+```
+
+**图解执行顺序：**
+
+```
+DOM 树结构：
+body
+  └── #root
+        └── div (Parent) ← onClick 在这里
+              └── ...
+
+  └── Portal 的 DOM 节点（实际在 body 下）
+
+React 组件树结构：
+Parent
+  └── MyPortal (Portal)
+        └── button
+
+点击 button 后的冒泡路径：
+React 组件树: button → MyPortal → Parent ✓
+DOM 树:       button → ... → body
+```
+
+**阻止 Portal 事件冒泡：**
+
+```jsx
+// 方法1：只阻止 React 组件树冒泡
+function MyPortal({ children }) {
+    return ReactDOM.createPortal(
+        <div onClick={e => e.stopPropagation()}>
+            {children}
+        </div>,
+        document.body
+    );
+}
+
+// 方法2：同时阻止 DOM 树冒泡（更彻底）
+function MyPortal({ children }) {
+    return ReactDOM.createPortal(
+        <div onClick={e => {
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
+        }}>
+            {children}
+        </div>,
+        document.body
+    );
+}
+```
+
+#### 真实面试题
+
+**题目：子组件是一个 Portal，发生点击事件能冒泡到父组件吗？**
+
+**满分答案：**
+
+**能。** 这是 React 刻意为之的设计。
+
+**事件基于组件树冒泡（不是 DOM 树）：**
+
+虽然 Portal 的 DOM 节点渲染在 `document.body` 下（或其他容器），但在 React 的虚拟 DOM 树中，它仍然是父组件的子组件。所以 Portal 中的点击事件会沿着 React 组件树冒泡到父组件——父组件的 `onClick` 可以捕获到 Portal 内元素的点击。
+
+**代码验证：**
+
+```jsx
+function Parent() {
+    return (
+        <div onClick={() => console.log('父组件被点击')}>
+            <Portal>
+                <button>按钮</button> {/* 点击这里，父组件的 onClick 也会触发 */}
+            </Portal>
+        </div>
+    );
+}
+```
+
+控制台会输出"父组件被点击"。这个机制的好处是：父组件可以在一个地方统一处理来自 Portal 的事件（比如模态框的关闭、弹出层的点击外部关闭等），而不需要 Portal 内部手动 emit 或 callback。
+
+---
+
+## 5.10 废弃的生命周期
+
+### 5.10.1 React 为何废弃 componentWillMount 等生命周期
+
+#### 知识点详解
+
+**被废弃的生命周期：**
+
+| 废弃钩子 | 标记为 unsafe | 替代方案 |
+|---|---|---|
+| `componentWillMount` | React 16.3 | `constructor` 或 `useEffect` |
+| `componentWillReceiveProps` | React 16.3 | `getDerivedStateFromProps` 或 `useEffect` |
+| `componentWillUpdate` | React 16.3 | `getSnapshotBeforeUpdate` |
+
+```jsx
+// React 17 之前
+class MyComponent extends React.Component {
+    componentWillMount() {
+        // 危险：Fiber 架构下可能被多次调用
+    }
+
+    componentWillReceiveProps(nextProps) {
+        // 危险：可能被 Fiber 打断后重新调用
+        if (nextProps.value !== this.props.value) {
+            this.setState({ derived: nextProps.value });
+        }
+    }
+
+    componentWillUpdate(nextProps, nextState) {
+        // 危险：更新前可能被打断
+    }
+}
+```
+
+**为什么废弃？**
+
+```javascript
+// 问题1：Fiber 架构下可能被多次调用
+// Fiber 架构中，渲染工作可中断、恢复
+// 如果 componentWillMount 执行到一半被打断，恢复后可能再次调用
+// 导致：重复请求、状态不一致
+
+// 问题2：容易导致服务端/客户端状态不一致
+// componentWillMount 在服务端和客户端都会执行
+// 如果在里请求数据，可能出现服务端渲染和客户端渲染结果不同
+
+// 问题3：阻碍异步渲染（Concurrent Mode）
+// React 未来要支持 Suspense、Streaming SSR 等特性
+// 这些生命周期在新的渲染模型下行为不可预测
+
+// 问题4：命名误导
+// componentWillMount 不等于 "挂载前" — 服务端渲染时也会调用
+// componentWillReceiveProps 不等于 "props 变了" — 首次渲染时也会调用
+```
+
+**替代方案详解：**
+
+```jsx
+// 替代 componentWillMount
+// 方案1：constructor
+class MyComponent extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { data: null };
+        // 同步初始化逻辑放这里
+        this.state = { data: fetchData() };  // 可以，但会阻塞渲染
+    }
+}
+
+// 方案2：useEffect（推荐）
+function MyComponent({ id }) {
+    const [data, setData] = useState(null);
+
+    useEffect(() => {
+        // 等效于 componentDidMount + componentDidUpdate
+        fetchData(id).then(setData);
+    }, [id]);
+
+    return <div>{data}</div>;
+}
+
+// 替代 componentWillReceiveProps
+// 方案1：getDerivedStateFromProps（静态方法，不推荐）
+static getDerivedStateFromProps(nextProps, prevState) {
+    // 每次 props 或 state 变化时调用
+    // 必须返回一个对象来更新 state，或 null 表示不更新
+    if (nextProps.value !== prevState.lastValue) {
+        return { derived: nextProps.value, lastValue: nextProps.value };
+    }
+    return null;
+}
+
+// 方案2：useEffect（推荐）
+function MyComponent({ value }) {
+    const [derived, setDerived] = useState(value);
+
+    useEffect(() => {
+        setDerived(value);
+    }, [value]);  // value 变化时同步
+
+    return <div>{derived}</div>;
+}
+
+// 替代 componentWillUpdate
+// getSnapshotBeforeUpdate（必须配合 componentDidUpdate）
+class MyComponent extends React.Component {
+    getSnapshotBeforeUpdate(prevProps, prevState) {
+        // 在 DOM 更新之前调用
+        // 可以访问更新前的 DOM 属性
+        return this.listRef.scrollHeight - this.listRef.scrollTop;
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        // snapshot 是 getSnapshotBeforeUpdate 返回的值
+        this.listRef.scrollTop = this.listRef.scrollHeight - snapshot;
+    }
+}
+```
+
+#### 真实面试题
+
+**题目：React 为什么要废弃 componentWillMount、componentWillReceiveProps、componentWillUpdate？**
+
+**满分答案：**
+
+**核心原因：Fiber 架构下的调用问题：**
+
+在 React 15 的 Stack Reconciler 中，渲染是同步且不可中断的，所以这些生命周期只会被调用一次。但 React 16 引入 Fiber 架构后，渲染工作可以被**中断、恢复、再执行**——这意味着这些生命周期可能被调用多次。
+
+例如 `componentWillMount`：如果在执行过程中被打断（比如高优先级任务插入），恢复后 `componentWillMount` 会再次被调用，导致重复请求、状态混乱。
+
+**具体问题：**
+
+- `componentWillMount`：服务端/客户端都会调用，容易产生 SSR 不一致；可能被 Fiber 打断恢复后多次调用
+- `componentWillReceiveProps`：首次渲染时也会调用（名字有误导性）；容易被 Fiber 打断
+- `componentWillUpdate`：更新前可能被打断，恢复后重新执行
+
+**每个废弃钩子的替代方案：**
+
+| 废弃钩子 | 替代方案 |
+|---|---|
+| `componentWillMount` | `constructor`（同步初始化）或 `useEffect`（异步请求） |
+| `componentWillReceiveProps` | `getDerivedStateFromProps`（静态方法）或 `useEffect` |
+| `componentWillUpdate` | `getSnapshotBeforeUpdate` + `componentDidUpdate` |
+
+**最佳实践**：在 React 16.3+ 中，能用函数组件 + Hooks 解决的问题，就不要用类组件的这些生命周期钩子。
+
+---
+
+## 5.11 render 方法原理
+
+### 5.11.1 React render 的执行时机与触发条件
+
+#### 知识点详解
+
+**render 方法的执行流程：**
+
+```jsx
+// 类组件 render
+class MyComponent extends React.Component {
+    render() {
+        // 返回 JSX（虚拟 DOM）
+        return <div>{this.props.name}</div>;
+    }
+}
+
+// 函数组件（本身就是 render 逻辑）
+function MyComponent({ name }) {
+    return <div>{name}</div>;
+}
+
+// render 的本质：
+// 1. 执行组件函数或 render 方法
+// 2. 返回 JSX（React Element）
+// 3. React 创建/更新虚拟 DOM
+// 4. Diff 算法对比新旧虚拟 DOM
+// 5. 找出最小变更，提交到真实 DOM
+```
+
+**触发 render 的5个条件：**
+
+```jsx
+// 条件1：首次挂载（mount）
+// 组件第一次渲染时必定执行 render
+const root = createRoot(document.getElementById('root'));
+root.render(<App />);  // App 及其子树首次 render
+
+// 条件2：setState / forceUpdate 调用
+class Counter extends React.Component {
+    state = { count: 0 };
+
+    handleClick = () => {
+        this.setState({ count: this.state.count + 1 });
+        // forceUpdate 也会触发
+        // this.forceUpdate();
+    };
+
+    render() {
+        return <button onClick={this.handleClick}>{this.state.count}</button>;
+    }
+}
+
+// 条件3：父组件重新渲染（props 变化）
+// 父组件 render → 子组件的 props 可能变化 → 子组件 render
+function Parent() {
+    const [color, setColor] = useState('red');
+    return (
+        <div>
+            <button onClick={() => setColor('blue')}>改变颜色</button>
+            {/* Child 会 render（即使 color 不是它的 props） */}
+            <Child />
+        </div>
+    );
+}
+
+// 条件4：useContext 的 Provider 值变化
+const ThemeContext = React.createContext('light');
+
+function App() {
+    const [theme, setTheme] = useState('light');
+
+    return (
+        <ThemeContext.Provider value={theme}>
+            <ThemedButton /> {/* theme 变化时，ThemedButton 会 render */}
+        </ThemeContext.Provider>
+    );
+}
+
+// 条件5：Context 变化
+// 任何订阅了该 Context 的组件都会重新 render
+const UserContext = React.createContext(null);
+
+function App() {
+    const [user, setUser] = useState({ name: 'John' });
+
+    return (
+        <UserContext.Provider value={user}>
+            <Dashboard /> {/* user 引用变化时，Dashboard 及其子树 render */}
+        </UserContext.Provider>
+    );
+}
+```
+
+**不触发 render 的情况：**
+
+```jsx
+// 情况1：props 未变且父组件未重渲染
+// 子组件不会 render
+
+// 情况2：shouldComponentUpdate 返回 false
+classoptimizedComponent extends React.Component {
+    shouldComponentUpdate(nextProps, nextState) {
+        // 返回 false 阻止 render
+        return nextProps.id !== this.props.id;
+    }
+
+    render() {
+        return <div>{this.props.name}</div>;
+    }
+}
+
+// 情况3：PureComponent 浅比较相等
+classoptimizedComponent extends React.PureComponent {
+    render() {
+        return <div>{this.props.name}</div>;
+    }
+}
+// PureComponent 自动对 props 和 state 做浅比较
+
+// 情况4：React.memo 浅比较相等
+constoptimizedComponent = React.memo(({ name }) => {
+    return <div>{name}</div>;
+});
+
+// 情况5：useMemo 返回值不变
+const expensive = useMemo(() => computeExpensive(a, b), [a, b]);
+// 只有 a 或 b 变化时才重新计算，组件不一定重新 render（取决于父组件）
+```
+
+#### 真实面试题
+
+**题目：说说 React render 方法的原理？在什么时候会被触发？**
+
+**满分答案：**
+
+**render 的原理：**
+
+`render` 方法（类组件）或函数组件本身，返回 JSX/React Element。React 将这个 Element 转化为虚拟 DOM 节点，通过 diff 算法对比新旧虚拟 DOM，找出最小变更后提交到真实 DOM。
+
+**5个触发条件：**
+
+1. **首次挂载**：组件第一次渲染时必定执行
+2. **`setState` / `forceUpdate`**：状态变化触发重新渲染
+3. **父组件重新渲染**：父组件 render → props 可能变化 → 子组件 render
+4. **`useContext` 的 Provider 值变化**：所有订阅该 Context 的组件重新 render
+5. **Context 变化**：任何 Context 值变化，订阅的组件都会 render
+
+**不触发的情况：**
+
+- props 未变但父组件未重渲染
+- `shouldComponentUpdate` 返回 `false`
+- `PureComponent` 浅比较相等
+- `React.memo` 浅比较相等
+
+**性能优化手段：**
+
+- `shouldComponentUpdate`：手动控制是否更新
+- `PureComponent`/`React.memo`：自动浅比较
+- `useMemo`/`useCallback`：稳定引用，减少不必要的渲染
+
+---
+
+## 5.12 React 事件与原生事件的执行顺序
+
+### 5.12.1 React 17 前后的事件绑定机制与完整执行顺序
+
+#### 知识点详解
+
+**React 17 前后的绑定变化：**
+
+```jsx
+// React 17 之前：所有 React 事件绑定在 document 上
+// 整个应用共用一个事件监听器（根节点在 document）
+document.addEventListener('click', reactEventHandler);
+
+// 问题：
+// 1. 第三方库也可能绑定在 document，冲突
+// 2. 微前端场景下，多个 React 版本各自在 document 绑定，混乱
+// 3. React 卸载时需要手动 removeEventListener
+
+// React 17+：事件绑定在 root 容器上
+<div id="root"></div>
+rootContainer.addEventListener('click', reactEventHandler);
+// 每个 React 应用独立，不污染 document
+```
+
+**完整执行顺序（React 17+）：**
+
+```
+点击事件触发 →
+
+1. 原生捕获阶段
+   document → html → body → ... → target
+
+2. React 捕获阶段（root 容器上）
+   root → ... → target
+
+3. 原生目标阶段
+   target（事件源元素）
+
+4. React 冒泡阶段（root 容器上）
+   target → ... → root
+
+5. 原生冒泡阶段
+   target → ... → body → html → document
+```
+
+```jsx
+// React 17+ 完整执行顺序演示
+// 层级结构：
+// <div id="root">  (React root)
+//   <div className="outer">   ← 父组件
+//     <div className="inner">   ← 子组件（Portal 渲染到 body）
+//     </div>
+//   </div>
+// </div>
+
+// 实际 DOM 结构：
+// <div id="root">...</div>
+// <div class="portal">...</div>  ← Portal 在 body 下
+
+// 点击 .inner 后的完整执行顺序：
+// 1. native capture:  document → ... → .inner
+// 2. react capture:    #root → .outer → .inner
+// 3. native target:    .inner
+// 4. react bubble:      .inner → .outer → #root
+// 5. native bubble:     .inner → ... → document
+```
+
+**阻止冒泡的区别：**
+
+```jsx
+// 只能阻止 React 事件的冒泡（react capture/bubble）
+e.stopPropagation();
+
+// 阻止原生事件的冒泡（包括其他原生事件监听器）
+e.nativeEvent.stopImmediatePropagation();
+
+// 实际例子
+function App() {
+    return (
+        <div
+            onClick={() => console.log('React div click')}
+            onClickCapture={() => console.log('React div capture')}
+        >
+            <button
+                onClick={(e) => {
+                    console.log('React button click');
+                    e.stopPropagation();  // 只阻止 React 冒泡
+                    // 原生事件继续冒泡到 document
+                }}
+                onClickCapture={() => console.log('React button capture')}
+            >
+                点击
+            </button>
+        </div>
+    );
+}
+
+// 第三方库的原生事件 vs React 事件
+document.addEventListener('click', () => {
+    console.log('原生 document 监听器');
+    // 这个不会被 e.stopPropagation() 阻止
+});
+
+// e.nativeEvent.stopImmediatePropagation() 才能阻止
+// 但它会阻止所有注册在同一个元素上的同类原生事件
+```
+
+#### 真实面试题
+
+**题目：说说 React 事件和原生事件的执行顺序**
+
+**满分答案：**
+
+React 17 之前，所有 React 事件都绑定在 `document` 上；React 17+ 改为绑定在 `root` 容器上。
+
+完整执行顺序（React 17+）：
+1. 原生捕获阶段（从外到内）
+2. React 捕获阶段（React 17+ 在 root 上统一处理）
+3. 原生目标阶段
+4. React 冒泡阶段（React 17+ 在 root 上统一处理）
+5. 原生冒泡阶段（从内到外）
+
+关键区别：
+- `e.stopPropagation()` 只阻止 React 事件冒泡，**不会**阻止原生事件冒泡
+- `e.nativeEvent.stopImmediatePropagation()` 才能阻止原生事件
+- React 事件是基于**组件树**的，而非 DOM 树（Portal 的 DOM 在 body 下，但事件仍冒泡到 React 父组件）
+
+---
+
+## 5.13 受控组件与非受控组件
+
+#### 知识点详解
+
+**受控组件：** 表单的值由 React state 控制，每次输入都通过 `onChange` 更新 state，组件重新渲染。
+
+```jsx
+function ControlledForm() {
+    const [name, setName] = useState('');
+
+    return (
+        <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+        />
+    );
+}
+```
+
+**非受控组件：** 表单的值由 DOM 自身管理，通过 `ref` 获取值。
+
+```jsx
+function UncontrolledForm() {
+    const inputRef = useRef(null);
+
+    const handleSubmit = () => {
+        console.log(inputRef.current.value);
+    };
+
+    return (
+        <input
+            defaultValue="初始值"
+            ref={inputRef}
+        />
+    );
+}
+```
+
+**对比：**
+
+| 特性 | 受控组件 | 非受控组件 |
+|------|---------|-----------|
+| 数据来源 | React state | DOM |
+| 更新方式 | setState + re-render | ref 直接读 DOM |
+| 实时验证 | ✅ 方便 | ❌ 不方便 |
+| 适用场景 | 表单验证、格式化输入 | 简单表单、文件上传 |
+
+**注意：** `<input type="file">` 始终是非受控组件。
+
+#### 真实面试题
+
+**题目：说说对受控组件和非受控组件的理解，以及应用场景?**
+
+**满分答案：**
+
+受控组件的值由 React state 驱动，通过 onChange 更新 state 后重新渲染；非受控组件的值由 DOM 自身管理，通过 ref 读取。受控组件适合需要实时验证、格式化输入、条件禁用的复杂表单；非受控组件适合简单的表单场景，代码更简洁。`<input type="file">` 只能是非受控组件。
+
+---
+
+## 5.14 Redux 在项目中的使用
+
+#### 知识点详解
+
+现代 Redux 使用 **Redux Toolkit (RTK)** + **React-Redux**：
+
+```javascript
+// 1. 定义 Slice
+import { createSlice, createAsyncThunk, configureStore } from '@reduxjs/toolkit';
+
+const fetchUser = createAsyncThunk('user/fetch', async (id) => {
+    const res = await fetch(`/api/users/${id}`);
+    return res.json();
+});
+
+const userSlice = createSlice({
+    name: 'user',
+    initialState: { data: null, loading: false, error: null },
+    reducers: {
+        clearUser: (state) => { state.data = null; }
+    },
+    extraReducers: (builder) => {
+        builder
+            .addCase(fetchUser.pending, (state) => { state.loading = true; })
+            .addCase(fetchUser.fulfilled, (state, action) => {
+                state.loading = false;
+                state.data = action.payload;
+            })
+            .addCase(fetchUser.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.error.message;
+            });
+    }
+});
+
+// 2. 配置 Store
+const store = configureStore({
+    reducer: {
+        user: userSlice.reducer,
+    }
+});
+
+// 3. 组件中使用
+import { useSelector, useDispatch } from 'react-redux';
+
+function UserProfile({ id }) {
+    const dispatch = useDispatch();
+    const { data, loading } = useSelector((state) => state.user);
+
+    useEffect(() => {
+        dispatch(fetchUser(id));
+    }, [id]);
+
+    if (loading) return <div>加载中...</div>;
+    return <div>{data.name}</div>;
+}
+```
+
+**推荐项目结构：**
+```
+src/
+├── store/
+│   ├── index.ts
+│   └── slices/
+│       ├── userSlice.ts
+│       └── counterSlice.ts
+├── hooks/
+│   └── useTypedSelector.ts
+└── features/
+    └── user/
+        └── UserPage.tsx
+```
+
+**最佳实践：**
+- 按 feature 模块拆分 slice
+- 使用 `createAsyncThunk` 处理异步
+- 使用 `createSelector`（reselect）缓存计算结果
+- normalize state 结构（`createEntityAdapter`）
+
+#### 真实面试题
+
+**题目：你在React项目中是如何使用Redux的?项目结构是如何划分的?**
+
+**满分答案：**
+
+使用 Redux Toolkit + React-Redux，按 feature 模块拆分 slice（`createSlice` 定义 reducer + action），用 `configureStore` 配置 store，组件中通过 `useSelector` 读状态、`useDispatch` 派发 action。异步请求用 `createAsyncThunk`，选择器用 reselect 缓存。项目结构按 store/slices、features、hooks 划分，state 结构使用 `createEntityAdapter` normalize。
+
+---
+
+## 5.15 Redux 中间件
+
+#### 知识点详解
+
+中间件是对 `dispatch` 的增强，在 action 发出 → reducer 处理之间插入逻辑。
+
+**洋葱模型：**
+```
+dispatch(action)
+  → middleware1 (before next)
+    → middleware2 (before next)
+      → reducer 执行
+    → middleware2 (after next)
+  → middleware1 (after next)
+```
+
+**实现原理（柯里化）：**
+```javascript
+const myMiddleware = store => next => action => {
+    console.log('before:', action);
+    const result = next(action);
+    console.log('after:', action);
+    return result;
+};
+
+function applyMiddleware(...middlewares) {
+    return (createStore) => (reducer, preloadedState) => {
+        const store = createStore(reducer, preloadedState);
+        let dispatch = store.dispatch;
+        const midAPI = {
+            getState: store.getState,
+            dispatch: (action) => dispatch(action)
+        };
+        const chain = middlewares.map(m => m(midAPI));
+        dispatch = compose(...chain)(store.dispatch);
+        return { ...store, dispatch };
+    };
+}
+```
+
+**常用中间件对比：**
+
+| 中间件 | 原理 | 适用场景 |
+|--------|------|---------|
+| redux-thunk | action 返回函数 | 简单异步（RTK 默认内置） |
+| redux-saga | Generator 函数 | 复杂异步流程（竞态、取消） |
+| redux-observable | RxJS Observable | 复杂事件流（防抖、节流） |
+| redux-logger | 打印 action | 开发调试 |
+
+#### 真实面试题
+
+**题目：说说对Redux中间件的理解?常用的中间件有哪些?实现原理?**
+
+**满分答案：**
+
+中间件是增强 dispatch 的函数，采用洋葱模型（`store => next => action` 柯里化），在 action 发出和 reducer 处理之间插入逻辑。常用中间件：redux-thunk（返回函数处理简单异步）、redux-saga（Generator 处理复杂异步流程）、redux-observable（RxJS 处理事件流）。实现核心是对 dispatch 进行高阶函数包装，形成中间件链。
+
+---
+
+## 5.16 Redux 工作原理
+
+#### 知识点详解
+
+**三大原则：**
+1. **单一数据源（Single Source of Truth）**：整个应用的状态存储在一棵对象树中
+2. **State 只读**：只能通过 dispatch action 修改
+3. **纯函数修改**：Reducer 是纯函数，`(state, action) => newState`
+
+**完整数据流：**
+```
+View (UI)
+  │ dispatch(action)
+  ▼
+Middleware (thunk / saga / logger)
+  │
+  ▼
+Reducer: (prevState, action) => newState
+  │
+  ▼
+Store (新 state)
+  │ notify subscribers
+  ▼
+View (re-render)
+```
+
+**核心概念：**
+- **Store**：状态容器，`{ getState, dispatch, subscribe }`
+- **Action**：描述事件的普通对象 `{ type: 'ADD_TODO', payload: { text: '...' } }`
+- **Reducer**：纯函数，根据 action type 返回新 state
+- **Selector**：从 state 中派生数据（可缓存）
+
+**Redux vs Context：**
+| 特性 | Redux | Context |
+|------|-------|---------|
+| 中间件 | ✅ 支持异步、日志等 | ❌ 无 |
+| DevTools | ✅ 时间旅行调试 | ❌ 基础 |
+| 性能优化 | useSelector 精确订阅 | 消费者全部重渲染 |
+| 学习成本 | 较高 | 低 |
+| 适用规模 | 大型应用 | 简单场景 |
+
+#### 真实面试题
+
+**题目：说说你对Redux的理解?其工作原理?**
+
+**满分答案：**
+
+Redux 遵循三大原则：单一数据源、state 只读、纯函数修改。工作流程是 View dispatch action → 中间件处理 → Reducer 纯函数返回新 state → Store 更新 → View 重新渲染。核心概念包括 Store（状态容器）、Action（事件描述）、Reducer（纯函数）、Selector（数据提取）。Redux 适合大型应用，支持中间件生态和 DevTools 调试；简单场景可用 Context 替代。
+
