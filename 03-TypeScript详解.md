@@ -1070,3 +1070,241 @@ emitter.emit("userCreated", { id: 1, name: "John" });
 emitter.emit("message", "Hello");
 // emitter.emit("userCreated", { id: 1 });  // Error: missing 'name'
 ```
+
+## 3.7 AI 模型配置接口设计
+
+#### 知识点详解
+
+**通用 AI 模型配置接口：**
+
+```typescript
+// ============ 基础类型定义 ============
+
+// AI 模型供应商
+type ModelProvider = 'openai' | 'anthropic' | 'google' | 'azure' | 'custom';
+
+// 模型名称
+type ModelName =
+    // OpenAI
+    | 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'gpt-3.5-turbo'
+    // Anthropic
+    | 'claude-3.5-sonnet' | 'claude-3-opus' | 'claude-3-haiku'
+    // Google
+    | 'gemini-1.5-pro' | 'gemini-1.5-flash'
+    // 自定义
+    | string;
+
+// ============ 消息格式 ============
+
+type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
+
+interface AIMessage {
+    role: MessageRole;
+    content: string;
+    // 可选：多模态内容
+    parts?: Array<{ type: 'text' | 'image'; content: string | URL }>;
+    // 可选：工具调用
+    toolCall?: {
+        id: string;
+        name: string;
+        input: Record<string, unknown>;
+    };
+}
+
+// ============ 请求配置 ============
+
+interface AIRequestConfig {
+    // 必需字段
+    provider: ModelProvider;
+    model: ModelName;
+    messages: AIMessage[];
+
+    // 核心参数
+    temperature?: number;         // 0-2，控制随机性
+    maxTokens?: number;          // 最大生成 token 数
+    topP?: number;               // 0-1，核采样
+    frequencyPenalty?: number;   // -2-2，频率惩罚
+    presencePenalty?: number;    // -2-2，存在惩罚
+
+    // 特定供应商参数
+    providerOptions?: {
+        // OpenAI
+        seed?: number;            // 确定性输出
+        responseFormat?: { type: 'text' | 'json_object' };
+
+        // Anthropic
+        system?: string;           // Anthropic 的 system prompt
+
+        // Google
+        safetySettings?: SafetySetting[];
+
+        // Azure
+        apiVersion?: string;
+
+        // 自定义供应商
+        [key: string]: unknown;
+    };
+
+    // 流式响应
+    stream?: boolean;
+    streamResolver?: (chunk: string) => void;
+
+    // 请求控制
+    signal?: AbortSignal;        // 支持中止
+    timeout?: number;             // 超时（ms）
+    retries?: number;            // 重试次数
+}
+
+// ============ 响应格式 ============
+
+interface AIResponse {
+    // 内容
+    content: string;
+    finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'unknown';
+
+    // 元信息
+    model: ModelName;
+    usage: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+
+    // 可选
+    id?: string;
+    created?: number;
+    provider?: ModelProvider;
+    rawResponse?: unknown;       // 原始响应（如 OpenAI 的完整对象）
+}
+
+// ============ 错误类型 ============
+
+type AIErrorCode =
+    | 'INVALID_API_KEY'
+    | 'RATE_LIMIT'
+    | 'CONTENT_FILTERED'
+    | 'MODEL_NOT_FOUND'
+    | 'CONTEXT_LENGTH_EXCEEDED'
+    | 'TIMEOUT'
+    | 'NETWORK_ERROR'
+    | 'UNKNOWN';
+
+interface AIError extends Error {
+    code: AIErrorCode;
+    provider: ModelProvider;
+    retryable: boolean;  // 是否可重试
+    details?: unknown;
+}
+
+// ============ 统一调用接口 ============
+
+interface AIProvider {
+    name: ModelProvider;
+    call(config: AIRequestConfig): Promise<AIResponse>;
+    stream(config: AIRequestConfig): Promise<void>;
+}
+
+// ============ 工厂函数：根据供应商创建实例 ============
+
+function createAIProvider(provider: ModelProvider): AIProvider {
+    switch (provider) {
+        case 'openai':
+            return new OpenAIProvider();
+        case 'anthropic':
+            return new AnthropicProvider();
+        case 'google':
+            return new GoogleProvider();
+        default:
+            return new CustomProvider(provider);
+    }
+}
+
+// ============ 统一调用示例 ============
+
+async function chat(config: AIRequestConfig): Promise<AIResponse> {
+    const provider = createAIProvider(config.provider);
+    return provider.call(config);
+}
+
+// 使用示例
+const response = await chat({
+    provider: 'openai',
+    model: 'gpt-4o',
+    messages: [
+        { role: 'user', content: '解释什么是 TypeScript' }
+    ],
+    temperature: 0.7,
+    maxTokens: 500
+});
+```
+
+**泛型版本（更灵活）：**
+
+```typescript
+// 支持自定义模型类型的泛型接口
+interface AIProvider<Config extends AIRequestConfig, Response extends AIResponse> {
+    name: ModelProvider;
+    call(config: Config): Promise<Response>;
+}
+
+// 使用泛型约束
+interface OpenAIConfig extends AIRequestConfig {
+    provider: 'openai';
+    model: 'gpt-4o' | 'gpt-4o-mini' | string;
+}
+
+interface OpenAIResponse extends AIResponse {
+    provider: 'openai';
+    rawResponse: OpenAI.Chat.ChatCompletion;
+}
+```
+
+**类型守卫（运行时校验）：**
+
+```typescript
+function isAIError(error: unknown): error is AIError {
+    return error instanceof Error && 'code' in error && 'provider' in error;
+}
+
+// 使用
+try {
+    const response = await chat(config);
+} catch (error) {
+    if (isAIError(error)) {
+        if (error.retryable) {
+            console.log(`可重试错误 (${error.code})，正在重试...`);
+        } else {
+            console.log(`不可重试错误: ${error.message}`);
+        }
+    }
+}
+```
+
+#### 真实面试题
+
+**题目：在 TypeScript 中，如何定义一个支持多种 AI 模型配置的通用接口？**
+
+**满分答案：**
+
+**核心设计思路：**
+
+1. **基础类型分层**：
+   - `ModelProvider`：供应商枚举
+   - `ModelName`：各供应商的模型名（联合类型）
+   - `AIMessage`：统一的消息格式
+
+2. **请求配置**：
+   - 通用参数（`temperature`、`maxTokens`）放顶层
+   - 供应商特定参数放 `providerOptions`
+
+3. **泛型约束**：
+   - `AIRequestConfig`：统一请求
+   - `AIResponse`：统一响应
+   - 各供应商可扩展（`OpenAIConfig extends AIRequestConfig`）
+
+**加分项：**
+- 类型守卫 `isAIError` 做运行时校验
+- `AbortSignal` 支持中止
+- `retryable` 字段区分可重试/不可重试错误
+
+---

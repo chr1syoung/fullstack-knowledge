@@ -739,3 +739,48 @@ function logPromptRequest(input, userId) {
 - 最小权限
 
 ---
+
+---
+
+## 10.6 AI 输出内容的 XSS 防护
+
+#### 真实面试题（补充）
+
+**题目：AI 返回的内容可能包含恶意脚本，前端如何防范 XSS 风险？**
+
+**满分答案：**
+
+**核心原则：AI 输出永远不可信，必须严格过滤**
+
+**三层防护：**
+
+```javascript
+// 第一层：Markdown 解析时过滤 HTML
+const html = DOMPurify.sanitize(marked.parse(aiOutput), {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'blockquote'],
+    ALLOWED_ATTR: ['class'], // 只允许 class 属性
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover'] // 禁止所有事件
+});
+
+// 第二层：代码高亮后再次清理
+const highlighted = Prism.highlight(code, grammar, 'prism');
+// 代码块内容用 textContent 而非 innerHTML 插入
+pre.innerHTML = `<code class="language-${lang}">${escapeHtml(code)}</code>`;
+
+// 第三层：CSP 头限制脚本执行
+// 服务器设置：
+// Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+```
+
+**特别注意：代码执行 vs 代码展示：**
+
+```javascript
+// ❌ 危险：直接渲染用户/AI 提供的代码
+codeBlock.innerHTML = `<code>${aiCode}</code>`;
+
+// ✅ 安全：代码只用于展示，不执行
+codeBlock.textContent = aiCode; // 或 escapeHtml 后再 innerHTML
+```
+
+---

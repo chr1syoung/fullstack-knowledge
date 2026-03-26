@@ -3042,6 +3042,134 @@ function debounce(fn, delay, immediate = false) {
 
 ---
 
+#### 真实面试题（补充）
+
+**题目：简单实现一个防抖函数，并说明它在 AI 搜索建议场景下的作用**
+
+**满分答案：**
+
+**手写防抖：**
+
+```javascript
+function debounce(fn, delay = 300) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            fn.apply(this, args);
+        }, delay);
+    };
+}
+
+// 带立即执行的版本
+function debounceImmediate(fn, delay = 300) {
+    let timer = null;
+    let immediate = true;
+    return function(...args) {
+        if (immediate) {
+            fn.apply(this, args);
+            immediate = false;
+        }
+        clearTimeout(timer);
+        timer = setTimeout(() => immediate = true, delay);
+    };
+}
+```
+
+**AI 搜索建议场景的作用：**
+
+```
+用户输入 "React"：
+用户: R → R-e → R-e-a → R-e-a-c → R-e-a-c-t
+
+不用防抖：每个字触发一次请求 → 5次
+用防抖(300ms)：等待用户停顿时触发 → 1-2次
+
+节省：60-80% 的请求量
+```
+
+**结合 AI 搜索的完整实现：**
+
+```javascript
+function SearchWithAISuggestion() {
+    const [query, setQuery] = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+
+    // 防抖：用户停止输入 300ms 后才触发搜索
+    const debouncedSearch = useMemo(
+        () => debounce(async (q) => {
+            if (!q.trim()) {
+                setSuggestions([]);
+                return;
+            }
+            const results = await fetchAISuggestions(q);
+            setSuggestions(results);
+        }, 300),
+        []
+    );
+
+    return (
+        <div>
+            <input
+                value={query}
+                onChange={e => {
+                    setQuery(e.target.value);
+                    debouncedSearch(e.target.value);
+                }}
+                placeholder="搜索..."
+            />
+            {suggestions.map(s => <SuggestionItem key={s.id} {...s} />)}
+        </div>
+    );
+}
+```
+
+**核心原理：** 防抖确保"最后一次"操作生效，在 AI 搜索场景下节省 API 调用。
+
+---
+
+**题目：Promise.all 和 Promise.allSettled 的区别，在并行调用多个 AI 模型时选哪个？**
+
+**满分答案：**
+
+**区别：**
+
+| 方法 | 行为 | 一个失败 | 全部成功 |
+|------|------|---------|---------|
+| `Promise.all` | 全部 resolved 才成功 | 立即 reject | ✅ |
+| `Promise.allSettled` | 等所有完成 | 不影响其他 | 全部 resolved/rejected 都返回 |
+
+```javascript
+// Promise.all：一个失败，全部白干
+const results = await Promise.all([
+    callGPT4(),
+    callClaude(),
+    callGemini()
+]);
+// GPT4 成功，Claude 失败 → 整体 reject，GPT4 结果丢失
+
+// Promise.allSettled：全部跑完，各论各的
+const results = await Promise.allSettled([
+    callGPT4(),
+    callClaude(),
+    callGemini()
+]);
+// 每个结果都带 status: 'fulfilled' | 'rejected'
+results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+        console.log(`模型${i}成功:`, r.value);
+    } else {
+        console.log(`模型${i}失败:`, r.reason);
+    }
+});
+```
+
+**AI 多模型调用选哪个：**
+- **选 `Promise.allSettled`（推荐）**：部分模型失败不影响其他结果，全部拿到后再统一处理
+- **选 `Promise.all`**：只在所有模型都必须成功时才用（如全部成功才给用户展示）
+
+
+
 ## 2.8 数组根据对象属性去重
 
 #### 知识点详解
@@ -3437,5 +3565,158 @@ const uniqueUsers = [...new Map(users.map(u => [u.id, u])).values()];
 4. **Map**：适合对象数组按 key 去重
 
 **面试加分：** 说明 `indexOf` 用 `===` 比较，无法识别 NaN；而 `Set` 和 `includes` 用 SameValueZero 算法，能识别 NaN。
+
+---
+
+## 2.11 数组转树结构（任务拆解）
+
+#### 知识点详解
+
+**题目：把扁平任务列表转为嵌套树**
+
+```javascript
+/**
+ * 数组转树结构
+ * @param {Array} list - 扁平的任务列表
+ * @param {string} idKey - ID 字段名，默认 'id'
+ * @param {string} parentKey - 父 ID 字段名，默认 'parentId'
+ * @param {string} rootValue - 根节点的父 ID 值，默认 null
+ * @returns {Array} 树结构
+ */
+function arrayToTree(list, idKey = 'id', parentKey = 'parentId', rootValue = null) {
+    // 1. 建立 ID → 节点的 Map（O(n) 查找）
+    const map = new Map();
+    for (const item of list) {
+        map.set(item[idKey], { ...item, children: [] });
+    }
+
+    // 2. 构建树
+    const tree = [];
+    for (const item of list) {
+        const node = map.get(item[idKey]);
+        const parentId = item[parentKey];
+
+        if (parentId === rootValue || parentId === null || parentId === undefined) {
+            // 根节点
+            tree.push(node);
+        } else {
+            // 找到父节点，挂接到 children
+            const parent = map.get(parentId);
+            if (parent) {
+                parent.children.push(node);
+            }
+        }
+    }
+
+    return tree;
+}
+
+/**
+ * 带排序版本的数组转树
+ */
+function arrayToTreeSorted(list, idKey = 'id', parentKey = 'parentId', orderKey = 'order') {
+    const map = new Map();
+    for (const item of list) {
+        map.set(item[idKey], { ...item, children: [] });
+    }
+
+    const tree = [];
+    for (const item of list) {
+        const node = map.get(item[idKey]);
+        const parentId = item[parentKey];
+
+        if (parentId === null || parentId === undefined) {
+            tree.push(node);
+        } else {
+            const parent = map.get(parentId);
+            if (parent) {
+                parent.children.push(node);
+            }
+        }
+    }
+
+    // 对每个节点的 children 按 order 排序
+    const sortNodes = (nodes) => {
+        nodes.sort((a, b) => (a[orderKey] || 0) - (b[orderKey] || 0));
+        nodes.forEach(node => sortNodes(node.children));
+    };
+
+    sortNodes(tree);
+    return tree;
+}
+
+/**
+ * 树转数组（逆操作）
+ */
+function treeToArray(tree, childrenKey = 'children') {
+    const result = [];
+    const traverse = (nodes) => {
+        for (const node of nodes) {
+            const { [childrenKey]: children, ...rest } = node;
+            result.push(rest);
+            if (children?.length) {
+                traverse(children);
+            }
+        }
+    };
+    traverse(tree);
+    return result;
+}
+
+// ============ 测试用例 ============
+const tasks = [
+    { id: 1, name: 'AI Agent 开发', parentId: null, order: 1 },
+    { id: 2, name: 'Prompt 设计', parentId: 1, order: 1 },
+    { id: 3, name: '模型选型', parentId: 1, order: 2 },
+    { id: 4, name: '前端界面', parentId: 1, order: 3 },
+    { id: 5, name: '上下文管理', parentId: 2, order: 1 },
+    { id: 6, name: 'few-shot 示例', parentId: 2, order: 2 },
+    { id: 7, name: 'React 实现', parentId: 4, order: 1 },
+    { id: 8, name: '流式渲染', parentId: 4, order: 2 }
+];
+
+console.log(JSON.stringify(arrayToTreeSorted(tasks), null, 2));
+// 输出：
+// [
+//   {
+//     "id": 1, "name": "AI Agent 开发", "children": [
+//       { "id": 2, "name": "Prompt 设计", "children": [
+//           { "id": 5, "name": "上下文管理", "children": [] },
+//           { "id": 6, "name": "few-shot 示例", "children": [] }
+//       ]},
+//       { "id": 3, "name": "模型选型", "children": [] },
+//       { "id": 4, "name": "前端界面", "children": [
+//           { "id": 7, "name": "React 实现", "children": [] },
+//           { "id": 8, "name": "流式渲染", "children": [] }
+//       ]}
+//     ]
+//   }
+// ]
+```
+
+**时间复杂度分析：**
+
+| 方法 | 时间复杂度 | 空间复杂度 |
+|------|-----------|-----------|
+| 双重循环 O(n²) | ❌ 嵌套遍历 | O(1) |
+| Map 优化 O(n) | ✅ 一次遍历建 Map，一次遍历建树 | O(n) |
+
+#### 真实面试题
+
+**题目：AI Agent 的任务拆解通常是树状的，请写一个函数将扁平的任务列表转为嵌套树**
+
+**满分答案：**
+
+**Map + 两次遍历（最优解）：**
+
+1. **第一次遍历**：将所有节点存入 `Map<id, node>`，O(n)
+2. **第二次遍历**：根据 `parentId` 挂接到父节点的 `children`，O(n)
+3. **最终返回根节点集合**，O(n)
+
+**关键点：**
+- 用 `Map` 做 O(1) 查找，避免双重循环 O(n²)
+- `parentId === null` 或 `undefined` 是根节点
+- `children` 数组初始化为空，避免 `undefined.children` 报错
+- 可扩展：支持按 `order` 字段排序
 
 ---

@@ -1228,3 +1228,295 @@ align-items: center;      /* 垂直居中 */
 - **绝对定位备选**：适用于弹窗、遮罩等特殊场景
 
 ---
+
+## 1.11 AI 对话列表布局实战
+
+#### 知识点详解
+
+**布局需求分析：**
+
+```
+┌─────────────────────────────────────┐
+│  AI Chat Layout                      │
+├──────────┬──────────────────────────┤
+│  头像     │  用户消息（右侧）         │
+│  (左固定) │  自动换行                │
+│           │                          │
+│  (左固定) │  AI回复消息（右侧）       │
+│           │  自动换行，支持代码块       │
+└──────────┴──────────────────────────┘
+```
+
+**核心实现：**
+
+```css
+/* 外层容器 */
+.chat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* 消息行：flex 横向布局 */
+.message-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+/* 头像固定宽度 */
+.avatar {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: 50%;
+}
+
+/* 消息内容：flex: 1 自适应，且自动换行 */
+.message-content {
+    flex: 1;
+    /* 重要：允许内容换行 */
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+/* 头像位置：左固定右自适应 */
+.message-row.user {
+    flex-direction: row;
+}
+.message-row.ai {
+    flex-direction: row;
+}
+
+/* AI 消息靠左，用户消息靠右 */
+.message-row.user .message-content {
+    background: #e8f0fe;
+    border-radius: 12px 12px 4px 12px;
+}
+.message-row.ai .message-content {
+    background: #f1f3f4;
+    border-radius: 12px 12px 12px 4px;
+}
+
+/* 代码块样式 */
+.message-content pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 8px 0;
+}
+```
+
+**带头像区分的完整实现：**
+
+```jsx
+function ChatMessage({ message }) {
+    const isUser = message.role === 'user';
+    return (
+        <div className={`message-row ${isUser ? 'user' : 'ai'}`}>
+            {/* 头像：左固定 */}
+            <div className="avatar">
+                <img
+                    src={isUser ? '/icons/user.png' : '/icons/ai.png'}
+                    alt={isUser ? '用户' : 'AI'}
+                />
+            </div>
+
+            {/* 消息内容：右自适应，自动换行 */}
+            <div className="message-content">
+                {message.isStreaming ? (
+                    <StreamingText text={message.text} />
+                ) : (
+                    <div>{message.text}</div>
+                )}
+            </div>
+        </div>
+    );
+}
+```
+
+**关键 CSS 技巧：**
+
+```css
+/* 1. 头像固定，内容自适应 */
+.avatar {
+    flex-shrink: 0;   /* 不被压缩 */
+    width: 36px;
+}
+.message-content {
+    flex: 1;          /* 占据剩余空间 */
+}
+
+/* 2. 长文本自动换行 */
+.message-content {
+    min-width: 0;     /* 关键！允许收缩到0再换行 */
+    word-break: break-word;
+}
+
+/* 3. 代码块不溢出 */
+pre {
+    max-width: 100%;
+    overflow-x: auto;  /* 水平滚动而非溢出 */
+}
+```
+
+#### 真实面试题
+
+**题目：实现一个类似 AI 聊天对话框的 CSS 布局，要求左侧头像固定，右侧内容自适应，且内容过长时自动换行**
+
+**满分答案：**
+
+**核心布局：Flexbox 横向布局**
+
+1. **消息行用 Flex**：`display: flex; align-items: flex-start`
+2. **头像固定**：`flex-shrink: 0; width: 36px`（不被压缩，宽度固定）
+3. **内容自适应**：`flex: 1`（占据剩余空间）
+4. **自动换行关键**：`min-width: 0` + `word-break: break-word`
+
+**常见踩坑：**
+- ❌ 不加 `min-width: 0`，内容不换行，直接撑破布局
+- ❌ 不加 `flex-shrink: 0`，头像被压缩变形
+- ✅ 代码块用 `overflow-x: auto` 而非直接溢出
+
+---
+
+## 1.12 CSS 无限旋转 Loading 动画
+
+#### 知识点详解
+
+**基础实现：**
+
+```css
+/* 1. 定义旋转动画 */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* 2. 应用到元素 */
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e0e0e0;       /* 底色 */
+    border-top-color: #3b82f6;       /* 旋转部分颜色 */
+    border-radius: 50%;               /* 圆形 */
+    animation: spin 0.8s linear infinite;  /* 匀速无限旋转 */
+}
+```
+
+**带渐变的高级 Loading：**
+
+```css
+/* 渐变 + 旋转 = 更现代的加载效果 */
+.loading-advanced {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        #3b82f6 0deg,
+        #8b5cf6 90deg,
+        #06b6d4 180deg,
+        transparent 270deg
+    );
+    animation: spin 1.2s linear infinite;
+    /* 配合 mask 形成缺口效果 */
+    -webkit-mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 4px),
+        white calc(100% - 4px)
+    );
+    mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 4px),
+        white calc(100% - 4px)
+    );
+}
+
+/* 打字机效果：AI 思考中 */
+@keyframes thinking {
+    0%, 100% { opacity: 0.3; }
+    50%       { opacity: 1; }
+}
+.loading-dots span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #666;
+    border-radius: 50%;
+    animation: thinking 1.2s ease-in-out infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+```
+
+**配合 AI 思考状态的完整示例：**
+
+```jsx
+function AIThinkingIndicator() {
+    return (
+        <div className="ai-thinking">
+            <div className="avatar">
+                <img src="/icons/ai.png" alt="AI" />
+            </div>
+            <div className="thinking-bubbles">
+                {/* 三点跳动效果 */}
+                <div className="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                {/* 旋转圆环（可选） */}
+                <div className="loading-spinner"></div>
+                <p className="thinking-text">AI 正在思考...</p>
+            </div>
+        </div>
+    );
+}
+```
+
+```css
+.ai-thinking {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+```
+
+#### 真实面试题
+
+**题目：CSS 中如何实现一个无限旋转的 Loading 动画，用于表示 AI 正在思考？**
+
+**满分答案：**
+
+**三步实现：**
+
+1. **定义动画**：`@keyframes spin { from → to { transform: rotate(0→360deg) } }`
+2. **绘制圆环**：`border-radius: 50%` + `border-top-color`（其余三边底色）
+3. **应用动画**：`animation: spin 0.8s linear infinite`
+
+**AI 思考状态的最佳实践：**
+
+| 效果 | 场景 | CSS 技巧 |
+|------|------|---------|
+| 旋转圆环 | 长时间加载 | `linear` 匀速 |
+| 三点跳动 | AI 实时思考 | `ease-in-out` + `nth-child` 错开 |
+| 渐变圆环 | 现代化风格 | `conic-gradient` + `mask` 裁剪 |
+
+**加分项：** 说明配合 `prefers-reduced-motion` 媒体查询做无障碍处理：
+```css
+@media (prefers-reduced-motion: reduce) {
+    .loading-spinner { animation: none; }
+}
+```
+
+---
