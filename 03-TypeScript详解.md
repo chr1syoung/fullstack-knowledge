@@ -397,6 +397,86 @@ type C = { a: string } & { b: string };
    - 条件类型
    - 类型别名（简化复杂类型）
 
+#### 真实面试题（补充）
+
+**题目5：TypeScript 中的 interface 和 type 有什么区别？**
+
+**满分答案：**
+
+**核心区别：**
+
+| 特性 | interface | type |
+|------|-----------|------|
+| 重复声明合并 | ✅ 支持（声明合并） | ❌ 报错 |
+| extends 继承 | ✅ `extends` 关键字 | ❌ 用 `&` 交叉 |
+| implements | ✅ 原生支持 | ❌ 不支持 |
+| 联合类型 | ❌ 不支持 | ✅ 支持 |
+| 元组类型 | ❌ 不支持 | ✅ 支持 |
+| 映射类型 | ❌ 不支持 | ✅ 支持 |
+| 条件类型 | ❌ 不支持 | ✅ 支持 |
+| 计算属性 | ❌ 不支持 | ✅ 支持 |
+
+**什么时候用 interface（4 种情况）：**
+
+```typescript
+// 1. 定义对象结构
+interface User {
+    id: number;
+    name: string;
+}
+
+// 2. 类实现接口
+class Admin implements User {
+    id = 1;
+    name = 'Admin';
+}
+
+// 3. 声明合并（扩展第三方库）
+declare module 'express' {
+    interface Application {
+        myCustomMethod(): void;
+    }
+}
+
+// 4. 需要被 implements 约束的抽象
+interface Logger {
+    log(message: string): void;
+}
+```
+
+**什么时候用 type（5 种情况）：**
+
+```typescript
+// 1. 联合类型
+type Status = 'pending' | 'success' | 'error';
+
+// 2. 元组
+type Pair = [string, number];
+
+// 3. 映射类型
+type Readonly<T> = { readonly [P in keyof T]: T[P] };
+
+// 4. 条件类型
+type NonNullable<T> = T extends null | undefined ? never : T;
+
+// 5. 类型别名（简化复杂类型）
+type Callback = (error: Error | null, result: string) => void;
+```
+
+**加分回答（面试官可能追问）：**
+
+```typescript
+// type 可以用 typeof 推断
+const config = { theme: 'dark', lang: 'zh' };
+type Config = typeof config;
+
+// interface 可以被 class implements
+// type 可以用 & 合并已有类型
+type ExtendedUser = User & { avatar: string };
+```
+
+**结论：** 大多数场景两者可以互换，团队统一风格即可。推荐：**对象结构 → interface，联合/元组/映射 → type**。
+
 ---
 
 ## 3.2 泛型

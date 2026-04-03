@@ -1375,6 +1375,76 @@ LowPriority = 4;          // 低优先级
 IdlePriority = 5;         // 空闲时执行
 ```
 
+#### 真实面试题（补充）
+
+**题目2：谈谈 React 的 Fiber 架构，它解决了什么问题？**
+
+**满分答案：**
+
+**Fiber 解决了什么问题：**
+
+React 16 之前，更新是同步且不可中断的。当组件树很大时，JavaScript 执行时间过长（超过 16ms），就会导致掉帧卡顿，用户输入、点击无响应。
+
+**Fiber 的核心思想：**
+
+1. **将更新拆分成小单元（Fiber 节点）**
+2. **每个单元可以暂停、恢复、放弃**
+3. **优先处理高优先级任务（如用户点击）**
+
+**对比：**
+
+| 旧架构（Stack Reconciler） | Fiber 架构 |
+|--------------------------|-----------|
+| 同步执行，不可中断 | 可中断，可恢复 |
+| 无法区分优先级 | 有优先级调度 |
+| 大树更新会卡顿 | 用户交互始终流畅 |
+| 无增量渲染 | 增量渲染（时间切片） |
+
+**Fiber 节点数据结构：**
+
+```typescript
+type Fiber = {
+    type: string | null;      // 组件类型
+    key: string | null;       // 列表 key
+    stateNode: any;           // DOM 节点
+
+    // 树结构
+    return: Fiber | null;     // 父节点
+    child: Fiber | null;      // 第一个子节点
+    sibling: Fiber | null;    // 下一个兄弟节点
+
+    // 更新相关
+    pendingProps: any;        // 新 props
+    memoizedProps: any;       // 旧 props
+    updateQueue: any;         // 更新队列
+
+    // 副作用
+    effectTag: string;        // 标记（Placement/Update/Delete）
+    nextEffect: Fiber | null;  // 下一个有副作用的节点
+
+    // 链表指针（Fiber 独有）
+    firstEffect: Fiber | null;
+    lastEffect: Fiber | null;
+};
+```
+
+**AI 前端中的应用：**
+
+React Fiber 的可中断渲染特性对 AI 流式输出非常重要：
+
+```tsx
+// AI 流式输出可以用 startTransition 标记为可中断
+const [streamingText, setStreamingText] = useState('');
+
+function onChunk(chunk: string) {
+    startTransition(() => {
+        setStreamingText(prev => prev + chunk);
+    });
+}
+
+// 用户滚动/输入时，AI 渲染可以被中断，优先响应用户
+```
+
 ---
 
 ### 5.x.x React 路由变化监听 [必会]

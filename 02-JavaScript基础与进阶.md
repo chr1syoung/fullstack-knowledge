@@ -2862,6 +2862,68 @@ async1();
 - 需要尽快执行 → 用 Promise.resolve().then()
 - 需要延迟执行 → 用 setTimeout
 
+#### 真实面试题（补充）
+
+**题目：浏览器中的事件循环（Event Loop）是如何工作的？**
+
+**满分答案：**
+
+**核心流程：**
+
+```
+┌─────────────────────────────────────┐
+│ 1. 执行同步代码（主线程）             │
+│    ↓                               │
+│ 2. 执行所有微任务（Promise.then/MutationObserver/queueMicrotask）│
+│    ↓ 微任务队列空                    │
+│ 3. 执行一个宏任务（setTimeout/setInterval/I/O/UI渲染） │
+│    ↓ 循环回步骤 1                    │
+└─────────────────────────────────────┘
+```
+
+**关键规则：**
+
+1. **微任务优于宏任务**：每次执行完微任务，必须清空整个微任务队列，才会开始下一个宏任务
+2. **微任务可嵌套**：微任务中可以继续添加微任务（立即清空）
+3. **UI 渲染在宏任务之后**：通常在每帧结束后触发（约 16.7ms）
+
+**经典题目：执行顺序**
+
+```javascript
+console.log('1');           // 同步
+
+setTimeout(() => console.log('2'), 0);  // 宏任务
+
+Promise.resolve().then(() => console.log('3'));  // 微任务
+
+queueMicrotask(() => console.log('4'));  // 微任务
+
+console.log('5');           // 同步
+
+// 输出顺序：1 → 5 → 3 → 4 → 2
+```
+
+**async/await 本质：**
+
+```javascript
+async function test() {
+    console.log('a');
+    await console.log('b');
+    console.log('c');  // await 后的代码 = 微任务
+}
+
+test();
+console.log('d');
+// 输出：a → b → d → c
+// 因为 await console.log('b') 后面的代码被包装成微任务
+```
+
+**AI 前端应用：**
+
+- SSE 流式数据 → 微任务批量更新，减少重渲染
+- `requestIdleCallback` → 在宏任务之间执行非紧急任务
+- React Scheduler → 自己实现任务优先级调度（模拟事件循环）
+
 ---
 
 ## 2.7 防抖与节流（面试重点）
@@ -3515,6 +3577,68 @@ const cloned = structuredClone(obj);
 3. **WeakMap 处理循环引用**（避免无限递归）
 4. **保留原型链**（`Object.create(Object.getPrototypeOf(obj))`）
 5. **处理 Symbol 键**
+
+#### 真实面试题（补充）
+
+**题目：手写一个简单的深拷贝函数，需要考虑循环引用。**
+
+**满分答案：**
+
+**完整实现（含循环引用处理）：**
+
+```typescript
+function deepClone<T>(obj: T, map = new WeakMap()): T {
+    // 基本类型和 null
+    if (obj === null || typeof obj !== 'object') return obj;
+
+    // 特殊对象类型
+    if (obj instanceof Date) return new Date(obj) as T;
+    if (obj instanceof RegExp) return new RegExp(obj.source, obj.flags) as T;
+    if (obj instanceof Map) {
+        const cloned = new Map() as T;
+        obj.forEach((val, key) => cloned.set(deepClone(key, map), deepClone(val, map)));
+        return cloned;
+    }
+    if (obj instanceof Set) {
+        const cloned = new Set() as T;
+        obj.forEach(val => cloned.add(deepClone(val, map)));
+        return cloned;
+    }
+
+    // 处理循环引用：检查是否已拷贝过
+    if (map.has(obj as object)) return map.get(obj as object) as T;
+
+    // 克隆对象（保留原型链）
+    const cloned = Object.create(Object.getPrototypeOf(obj)) as T;
+    map.set(obj as object, cloned);
+
+    // 递归拷贝所有键（包括 Symbol）
+    Reflect.ownKeys(obj).forEach(key => {
+        cloned[key] = deepClone((obj as Record<string | symbol, unknown>)[key], map);
+    });
+
+    return cloned;
+}
+
+// ============ 测试 ============
+// 循环引用测试
+const original: Record<string, unknown> = { name: 'test' };
+original.self = original; // 循环引用
+const cloned = deepClone(original);
+console.log(cloned.self === cloned); // true（循环引用正确处理！）
+
+// 普通对象
+const obj = { a: 1, b: { c: 2 }, d: new Date() };
+const copy = deepClone(obj);
+console.log(copy.b === obj.b); // false（深拷贝）
+console.log(copy.d instanceof Date); // true
+```
+
+**关键点：**
+- `WeakMap` 记录已访问对象，防止无限递归
+- 特殊类型（Date/RegExp/Map/Set）单独处理
+- `Reflect.ownKeys` 包含 Symbol 键
+- `Object.create(Object.getPrototypeOf(obj))` 保留原型链
 
 ---
 
@@ -5875,3 +5999,155 @@ setup() {
 }
 ```
 
+
+---
+
+## 2.25 带并发限制的 Promise 调度器
+
+### 知识点详解
+
+**使用场景：**
+- 多 AI 模型并发调用（同时请求 GPT/Claude/Gemini）
+- 控制 API 请求并发数，防止接口限流
+- 批量任务调度（如批量处理用户消息）
+
+**核心思路：**
+
+```
+任务队列：[ task1, task2, task3, task4, task5 ]
+                    ↑
+                同时执行 N 个
+running = 2
+limit = 2
+```
+
+**实现原理：**
+
+```typescript
+class Scheduler {
+    private running = 0;
+    private queue: Array<() => Promise<unknown>> = [];
+
+    constructor(private limit: number) {}
+
+    add<T>(fn: () => Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            this.queue.push(() => fn().then(resolve).catch(reject));
+            this.drain();
+        });
+    }
+
+    private drain(): void {
+        while (this.running < this.limit && this.queue.length > 0) {
+            const task = this.queue.shift()!;
+            this.running++;
+            task().finally(() => {
+                this.running--;
+                this.drain(); // 完成后继续执行下一个
+            });
+        }
+    }
+}
+```
+
+### 真实面试题
+
+**题目：手写代码：实现一个带并发限制的 Promise 调度器。**
+
+**满分答案：**
+
+```typescript
+class Scheduler {
+    private running = 0;
+    private queue: Array<() => Promise<unknown>> = [];
+
+    constructor(private limit: number) {}
+
+    add<T>(fn: () => Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            this.queue.push(() => fn().then(resolve).catch(reject));
+            this.drain();
+        });
+    }
+
+    private drain(): void {
+        while (this.running < this.limit && this.queue.length > 0) {
+            const task = this.queue.shift()!;
+            this.running++;
+            task().finally(() => {
+                this.running--;
+                this.drain(); // 递归触发下一个
+            });
+        }
+    }
+}
+
+// ============ 测试用例 ============
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+const scheduler = new Scheduler(2);
+
+(async () => {
+    const start = Date.now();
+
+    scheduler.add(() => sleep(1000).then(() => 1));
+    scheduler.add(() => sleep(800).then(() => 2));
+    scheduler.add(() => sleep(600).then(() => 3));
+    scheduler.add(() => sleep(400).then(() => 4));
+
+    const results = await Promise.all([
+        scheduler.add(() => sleep(1000).then(() => 'A')),
+        scheduler.add(() => sleep(800).then(() => 'B')),
+        scheduler.add(() => sleep(600).then(() => 'C')),
+        scheduler.add(() => sleep(400).then(() => 'D')),
+    ]);
+
+    console.log('耗时:', Date.now() - start, 'ms'); // ~1600ms（2并发）
+    console.log('结果:', results); // ['A','B','C','D']
+})();
+/*
+执行流程：
+t=0:   A、B 同时开始
+t=800: B 结束 → C 开始
+t=1000: A 结束 → D 开始
+t=1400: C 结束
+t=1600: D 结束
+总耗时 ≈ 1600ms（而非 4000ms 串行）
+*/
+```
+
+**AI 场景实战（多模型并发调用）：**
+
+```typescript
+const scheduler = new Scheduler(3); // 最多3个并发
+
+const results = await Promise.allSettled([
+    scheduler.add(() => callOpenAI(message)),
+    scheduler.add(() => callClaude(message)),
+    scheduler.add(() => callGemini(message)),
+    scheduler.add(() => callDeepSeek(message)),  // 排队等待
+]);
+
+results.forEach((r, i) => {
+    if (r.status === 'fulfilled') showModelResponse(i, r.value);
+    else showError(i, r.reason);
+});
+```
+
+**扩展：添加任务优先级**
+
+```typescript
+add<T>(fn: () => Promise<T>, priority: number = 0): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        // 优先级高的插入队列前面
+        if (priority > 0) {
+            this.queue.unshift(() => fn().then(resolve).catch(reject));
+        } else {
+            this.queue.push(() => fn().then(resolve).catch(reject));
+        }
+        this.drain();
+    });
+}
+```
+
+---
