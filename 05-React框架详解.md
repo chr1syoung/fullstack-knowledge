@@ -3324,3 +3324,198 @@ View (re-render)
 
 Redux 遵循三大原则：单一数据源、state 只读、纯函数修改。工作流程是 View dispatch action → 中间件处理 → Reducer 纯函数返回新 state → Store 更新 → View 重新渲染。核心概念包括 Store（状态容器）、Action（事件描述）、Reducer（纯函数）、Selector（数据提取）。Redux 适合大型应用，支持中间件生态和 DevTools 调试；简单场景可用 Context 替代。
 
+
+---
+
+## 5.17 React Fiber架构详解
+
+#### 知识点详解
+
+**为什么需要Fiber：**
+
+React 15及之前使用递归遍历虚拟DOM，一旦开始渲染就无法中断。当组件树非常庞大时，会导致：
+1. 主线程被阻塞，页面卡顿
+2. 动画掉帧
+3. 用户输入无响应
+
+**Fiber的核心思想：**
+
+```
+传统React（Stack Reconciler）：
+- 递归遍历，不可中断
+- 一次性完成整棵树的Diff和更新
+
+Fiber架构（Fiber Reconciler）：
+- 将工作拆分为小单元（Fiber节点）
+- 可暂停、可恢复、可优先级调度
+- 利用浏览器空闲时间执行（requestIdleCallback）
+```
+
+**Fiber节点结构：**
+
+```javascript
+// 简化版Fiber节点
+const fiber = {
+    // 类型信息
+    type: 'div',           // 组件类型（函数、类、DOM标签）
+    key: null,             // key
+    
+    // 树形结构
+    child: fiber,          // 第一个子节点
+    sibling: fiber,        // 下一个兄弟节点
+    return: fiber,         // 父节点
+    
+    // 状态
+    pendingProps: {},      // 新props
+    memoizedProps: {},     // 当前props
+    memoizedState: {},     // 当前state（hooks链表）
+    
+    // 副作用
+    effectTag: 'UPDATE',   // 标记：PLACEMENT/UPDATE/DELETION
+    nextEffect: fiber,     // 下一个有副作用的节点
+    firstEffect: fiber,    // 第一个副作用子节点
+    lastEffect: fiber,     // 最后一个副作用子节点
+    
+    // 调度
+    expirationTime: 0,     // 过期时间（优先级）
+    mode: 0,               // 模式（同步/异步）
+};
+```
+
+**Fiber的双缓冲机制：**
+
+```
+当前屏幕显示（Current Tree）：
+    Root → A → B → C
+              
+内存中构建（WorkInProgress Tree）：
+    Root' → A' → B' → C'
+
+渲染流程：
+1. 基于Current Tree创建WorkInProgress Tree
+2. 在WorkInProgress Tree上执行Diff和更新
+3. 完成后，WorkInProgress Tree变为Current Tree
+4. 重复步骤1
+
+好处：
+- 可以随时中断，不影响当前显示
+- 错误时可以回滚到Current Tree
+```
+
+**Fiber的调度过程：**
+
+```javascript
+// 工作循环（可中断）
+function workLoop(deadline) {
+    // 是否有剩余时间
+    while (nextUnitOfWork && deadline.timeRemaining() > 0) {
+        nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    }
+    
+    // 如果还有工作，请求下一次调度
+    if (nextUnitOfWork) {
+        requestIdleCallback(workLoop);
+    } else {
+        // 所有工作完成，提交更新
+        commitRoot();
+    }
+}
+
+// 执行一个工作单元
+function performUnitOfWork(fiber) {
+    // 1. 处理当前节点（创建DOM或执行组件）
+    if (fiber.type instanceof Function) {
+        updateFunctionComponent(fiber);
+    } else {
+        updateHostComponent(fiber);
+    }
+    
+    // 2. 返回下一个工作单元（子节点 -> 兄弟节点 -> 父节点的兄弟节点）
+    if (fiber.child) {
+        return fiber.child;
+    }
+    
+    let nextFiber = fiber;
+    while (nextFiber) {
+        if (nextFiber.sibling) {
+            return nextFiber.sibling;
+        }
+        nextFiber = nextFiber.return;
+    }
+    
+    return null;
+}
+```
+
+**Fiber的优先级调度：**
+
+```javascript
+// React优先级等级（从高到低）
+const priorities = {
+    ImmediatePriority: 99,      // 立即执行（用户输入）
+    UserBlockingPriority: 98,   // 用户阻塞（点击、滚动）
+    NormalPriority: 97,         // 正常优先级（网络请求回调）
+    LowPriority: 96,            // 低优先级（分析、日志）
+    IdlePriority: 95,           // 空闲时执行（预加载）
+};
+
+// 使用示例
+ReactDOM.unstable_scheduleCallback(
+    UserBlockingPriority,
+    () => updateInputValue(value)
+);
+```
+
+**Fiber解决的问题：**
+
+| 问题 | 解决方案 |
+|------|---------|
+| 渲染阻塞主线程 | 工作拆分为小单元，可中断 |
+| 无法优先级调度 | 不同更新赋予不同优先级 |
+| 无法实现Time Slice | 利用requestIdleCallback |
+| 错误边界难实现 | 每个Fiber节点可捕获错误 |
+| 无法实现Suspense | 异步渲染支持等待数据 |
+
+#### 真实面试题
+
+**题目：谈谈React的Fiber架构，它解决了什么问题？**
+
+**满分答案：**
+
+**解决的问题：**
+
+1. **渲染阻塞**：旧版React递归遍历不可中断，Fiber将工作拆分为小单元，利用浏览器空闲时间执行
+2. **优先级调度**：不同更新可设置不同优先级（用户输入 > 网络回调 > 预加载）
+3. **并发特性**：为Suspense、Concurrent Mode等特性奠定基础
+
+**核心机制：**
+
+```
+Fiber节点：
+- 每个组件对应一个Fiber节点
+- 通过child/sibling/return连接成链表（非递归遍历）
+- 双缓冲：Current Tree（当前显示）和 WorkInProgress Tree（内存中构建）
+
+工作循环：
+- performUnitOfWork：执行一个工作单元
+- 有剩余时间继续执行，否则让出主线程
+- 所有工作完成后commitRoot提交更新
+```
+
+**代码示意：**
+
+```javascript
+// 工作循环（可中断）
+function workLoop(deadline) {
+    while (nextUnitOfWork && deadline.timeRemaining() > 0) {
+        nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    }
+    if (nextUnitOfWork) {
+        requestIdleCallback(workLoop);  // 还有工作，继续调度
+    } else {
+        commitRoot();  // 完成，提交更新
+    }
+}
+```
+
+---

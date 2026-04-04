@@ -1388,3 +1388,139 @@ try {
 - `retryable` 字段区分可重试/不可重试错误
 
 ---
+
+---
+
+## 3.8 TypeScript interface vs type 区别
+
+#### 知识点详解
+
+**interface 和 type 的核心区别：**
+
+```typescript
+// 1. 扩展方式不同
+
+// interface：使用 extends 扩展
+interface Animal {
+    name: string;
+}
+interface Dog extends Animal {
+    breed: string;
+}
+
+// type：使用 & 交叉类型扩展
+type Animal = {
+    name: string;
+}
+type Dog = Animal & {
+    breed: string;
+}
+
+// 2. 重复定义（声明合并）
+
+// interface 支持重复定义，会自动合并
+interface User {
+    name: string;
+}
+interface User {
+    age: number;
+}
+// 结果：User { name: string; age: number; }
+
+// type 不支持重复定义
+type User = { name: string; };
+type User = { age: number; };  // Error: Duplicate identifier 'User'
+
+// 3. type 可以定义更多类型
+
+// type 可以定义基本类型别名
+type ID = string | number;
+type Status = 'pending' | 'success' | 'error';
+
+// type 可以使用条件类型
+type IsString<T> = T extends string ? true : false;
+
+// type 可以定义元组
+type Point = [number, number];
+
+// interface 只能定义对象类型
+
+// 4. 实现类时的差异
+
+interface Animal {
+    name: string;
+    makeSound(): void;
+}
+
+class Dog implements Animal {
+    name = 'Dog';
+    makeSound() {
+        console.log('Woof!');
+    }
+}
+
+// type 也可以被类实现，但 interface 更语义化
+type AnimalType = {
+    name: string;
+    makeSound(): void;
+}
+class Cat implements AnimalType {
+    name = 'Cat';
+    makeSound() {
+        console.log('Meow!');
+    }
+}
+
+// 5. 性能差异
+// interface 在大型项目中性能更好（支持声明合并，编译器优化）
+// type 在复杂类型运算时更灵活
+```
+
+**选择建议：**
+
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| 定义对象类型 | interface | 语义清晰，支持声明合并 |
+| 需要扩展第三方类型 | interface | extends 更直观 |
+| 定义联合类型/交叉类型 | type | interface 无法实现 |
+| 定义基本类型别名 | type | interface 无法实现 |
+| 使用条件类型/映射类型 | type | interface 无法实现 |
+| 大型项目公共类型 | interface | 性能更好，支持声明合并 |
+
+#### 真实面试题
+
+**题目：TypeScript中的interface 和 type 有什么区别？**
+
+**满分答案：**
+
+**核心区别（4点）：**
+
+1. **扩展方式**
+   - interface：`extends` 扩展
+   - type：`&` 交叉类型扩展
+
+2. **声明合并**
+   - interface：支持重复定义，自动合并
+   - type：不支持重复定义
+
+3. **类型范围**
+   - interface：只能定义对象类型
+   - type：可以定义对象、联合类型、基本类型别名、元组、条件类型
+
+4. **使用场景**
+   - interface：定义对象结构、类实现、需要声明合并时
+   - type：定义联合类型、复杂类型运算、基本类型别名
+
+```typescript
+// 推荐：对象类型用 interface
+interface User {
+    name: string;
+    age: number;
+}
+
+// 推荐：联合类型用 type
+type Status = 'pending' | 'success' | 'error';
+type ID = string | number;
+```
+
+---

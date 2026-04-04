@@ -6151,3 +6151,410 @@ add<T>(fn: () => Promise<T>, priority: number = 0): Promise<T> {
 ```
 
 ---
+
+---
+
+## 2.25 Promise.all vs Promise.allSettled + 深拷贝(循环引用) + 事件循环 + 并发限制调度器
+
+#### 知识点详解
+
+**Promise.all vs Promise.allSettled：**
+
+```javascript
+// Promise.all：全部成功才成功，任一失败立即失败
+Promise.all([p1, p2, p3])
+    .then(results => console.log(results))  // [r1, r2, r3]
+    .catch(error => console.error(error));  // 第一个失败的错误
+
+// Promise.allSettled：等待所有完成，无论成功失败
+Promise.allSettled([p1, p2, p3])
+    .then(results => {
+        // [
+        //   { status: 'fulfilled', value: r1 },
+        //   { status: 'rejected', reason: err },
+        //   { status: 'fulfilled', value: r3 }
+        // ]
+    });
+```
+
+| 特性 | Promise.all | Promise.allSettled |
+|------|-------------|-------------------|
+| 成功条件 | 所有Promise成功 | 所有Promise完成（无论结果） |
+| 失败行为 | 任一失败立即reject | 不会reject，返回所有结果 |
+| 返回值 | 成功值的数组 | 包含status/value/reason的对象数组 |
+| 使用场景 | 需要所有成功才能继续 | 需要知道每个Promise的结果 |
+
+**深拷贝（考虑循环引用）：**
+
+```javascript
+function deepClone(obj, map = new WeakMap()) {
+    // 基本类型直接返回
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    
+    // 处理循环引用
+    if (map.has(obj)) {
+        return map.get(obj);
+    }
+    
+    // 处理日期
+    if (obj instanceof Date) {
+        return new Date(obj.getTime());
+    }
+    
+    // 处理正则
+    if (obj instanceof RegExp) {
+        return new RegExp(obj);
+    }
+    
+    // 处理Map
+    if (obj instanceof Map) {
+        const clone = new Map();
+        map.set(obj, clone);
+        obj.forEach((value, key) => {
+            clone.set(deepClone(key, map), deepClone(value, map));
+        });
+        return clone;
+    }
+    
+    // 处理Set
+    if (obj instanceof Set) {
+        const clone = new Set();
+        map.set(obj, clone);
+        obj.forEach(value => {
+            clone.add(deepClone(value, map));
+        });
+        return clone;
+    }
+    
+    // 处理数组
+    if (Array.isArray(obj)) {
+        const clone = [];
+        map.set(obj, clone);
+        for (let i = 0; i < obj.length; i++) {
+            clone[i] = deepClone(obj[i], map);
+        }
+        return clone;
+    }
+    
+    // 处理对象
+    const clone = Object.create(Object.getPrototypeOf(obj));
+    map.set(obj, clone);
+    
+    for (const key of Object.keys(obj)) {
+        clone[key] = deepClone(obj[key], map);
+    }
+    
+    // 拷贝Symbol类型的key
+    const symbols = Object.getOwnPropertySymbols(obj);
+    for (const sym of symbols) {
+        clone[sym] = deepClone(obj[sym], map);
+    }
+    
+    return clone;
+}
+
+// 测试用例
+const obj = {
+    name: 'test',
+    date: new Date(),
+    map: new Map([['key', 'value']]),
+    set: new Set([1, 2, 3]),
+    regexp: /test/gi,
+    func: function() { return this.name; },  // 函数通常不拷贝
+    [Symbol('sym')]: 'symbol value'
+};
+obj.circular = obj;  // 循环引用
+
+const cloned = deepClone(obj);
+console.log(cloned.circular === cloned);  // true，循环引用正确
+console.log(cloned.date !== obj.date);    // true，日期是新对象
+console.log(cloned.map !== obj.map);      // true，Map是新对象
+```
+
+**浏览器事件循环（Event Loop）：**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        调用栈 (Call Stack)                    │
+│  - 同步代码执行                                              │
+│  - 函数调用入栈出栈                                          │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      任务队列 (Task Queues)                   │
+├─────────────────────────────┬───────────────────────────────┤
+│      微任务队列              │       宏任务队列               │
+│  (Microtask Queue)          │   (Macrotask Queue)           │
+│                             │                               │
+│  - Promise.then()           │  - setTimeout                 │
+│  - Promise.catch()          │  - setInterval                │
+│  - Promise.finally()        │  - setImmediate (Node)        │
+│  - queueMicrotask()         │  - I/O操作                     │
+│  - MutationObserver         │  - UI渲染                      │
+│  - process.nextTick (Node)  │  - requestAnimationFrame      │
+└─────────────────────────────┴───────────────────────────────┘
+
+执行顺序：
+1. 执行同步代码（调用栈）
+2. 执行所有微任务（清空微任务队列）
+3. 执行一个宏任务
+4. 重复步骤2-3
+```
+
+```javascript
+console.log('1');  // 同步
+
+setTimeout(() => {
+    console.log('2');  // 宏任务
+    Promise.resolve().then(() => {
+        console.log('3');  // 微任务（在宏任务之后）
+    });
+}, 0);
+
+Promise.resolve().then(() => {
+    console.log('4');  // 微任务
+    setTimeout(() => {
+        console.log('5');  // 宏任务（在微任务之后）
+    }, 0);
+});
+
+console.log('6');  // 同步
+
+// 输出顺序：1 6 4 2 3 5
+```
+
+**带并发限制的Promise调度器：**
+
+```javascript
+class PromiseScheduler {
+    constructor(concurrency) {
+        this.concurrency = concurrency;  // 最大并发数
+        this.running = 0;                // 当前运行数
+        this.queue = [];                 // 等待队列
+    }
+
+    // 添加任务
+    add(promiseFactory) {
+        return new Promise((resolve, reject) => {
+            this.queue.push({
+                promiseFactory,
+                resolve,
+                reject
+            });
+            this.run();
+        });
+    }
+
+    // 执行队列
+    run() {
+        // 如果当前运行数小于并发限制，且有等待任务
+        while (this.running < this.concurrency && this.queue.length > 0) {
+            const { promiseFactory, resolve, reject } = this.queue.shift();
+            this.running++;
+            
+            promiseFactory()
+                .then(resolve)
+                .catch(reject)
+                .finally(() => {
+                    this.running--;
+                    this.run();  // 继续执行队列中的下一个
+                });
+        }
+    }
+}
+
+// 使用示例
+const scheduler = new PromiseScheduler(3);  // 最多3个并发
+
+const urls = ['url1', 'url2', 'url3', 'url4', 'url5'];
+
+const promises = urls.map(url => 
+    scheduler.add(() => fetch(url).then(r => r.json()))
+);
+
+Promise.all(promises).then(results => {
+    console.log('所有请求完成:', results);
+});
+
+// 更简洁的实现（使用async/await）
+async function asyncPool(concurrency, iterable, iteratorFn) {
+    const ret = [];      // 存储所有Promise
+    const executing = []; // 存储正在执行的Promise
+    
+    for (const item of iterable) {
+        const p = Promise.resolve().then(() => iteratorFn(item));
+        ret.push(p);
+        
+        if (iterable.length >= concurrency) {
+            const e = p.then(() => {
+                // 当这个Promise完成时，从executing中移除
+                executing.splice(executing.indexOf(e), 1);
+            });
+            executing.push(e);
+            
+            // 如果正在执行的数量达到并发限制，等待其中一个完成
+            if (executing.length >= concurrency) {
+                await Promise.race(executing);
+            }
+        }
+    }
+    
+    return Promise.all(ret);
+}
+
+// 使用asyncPool
+asyncPool(3, urls, url => fetch(url))
+    .then(results => console.log(results));
+```
+
+#### 真实面试题
+
+**题目1：Promise.all 和 Promise.allSettled 的区别是什么？**
+
+**满分答案：**
+
+| 特性 | Promise.all | Promise.allSettled |
+|------|-------------|-------------------|
+| 成功条件 | 所有Promise成功 | 所有Promise完成 |
+| 失败行为 | 任一失败立即reject | 不会reject |
+| 返回值 | 成功值数组 | 包含status/value/reason的对象数组 |
+| 使用场景 | 需要所有成功才能继续 | 需要知道每个Promise的结果 |
+
+```javascript
+// Promise.all：任一失败整体失败
+Promise.all([p1, p2, p3]).catch(err => handleError(err));
+
+// Promise.allSettled：获取所有结果
+Promise.allSettled([p1, p2, p3]).then(results => {
+    results.forEach(r => {
+        if (r.status === 'fulfilled') {
+            console.log('成功:', r.value);
+        } else {
+            console.log('失败:', r.reason);
+        }
+    });
+});
+```
+
+---
+
+**题目2：请手写一个简单的深拷贝函数，需要考虑循环引用。**
+
+**满分答案：**
+
+```javascript
+function deepClone(obj, map = new WeakMap()) {
+    if (obj === null || typeof obj !== 'object') return obj;
+    
+    // 处理循环引用
+    if (map.has(obj)) return map.get(obj);
+    
+    // 处理特殊类型
+    if (obj instanceof Date) return new Date(obj.getTime());
+    if (obj instanceof RegExp) return new RegExp(obj);
+    if (obj instanceof Map) {
+        const clone = new Map();
+        map.set(obj, clone);
+        obj.forEach((v, k) => clone.set(deepClone(k, map), deepClone(v, map)));
+        return clone;
+    }
+    if (obj instanceof Set) {
+        const clone = new Set();
+        map.set(obj, clone);
+        obj.forEach(v => clone.add(deepClone(v, map)));
+        return clone;
+    }
+    
+    // 处理数组和对象
+    const clone = Array.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
+    map.set(obj, clone);
+    
+    for (const key of [...Object.keys(obj), ...Object.getOwnPropertySymbols(obj)]) {
+        clone[key] = deepClone(obj[key], map);
+    }
+    
+    return clone;
+}
+```
+
+**关键点：**
+1. 使用WeakMap记录已拷贝的对象，处理循环引用
+2. 特殊处理Date、RegExp、Map、Set
+3. 拷贝Symbol类型的key
+
+---
+
+**题目3：浏览器中的事件循环(EventLoop)是如何工作的？**
+
+**满分答案：**
+
+**执行顺序：**
+1. 执行同步代码（调用栈）
+2. 执行所有微任务（Promise.then、queueMicrotask）
+3. 执行一个宏任务（setTimeout、setInterval、I/O）
+4. 重复步骤2-3
+
+**微任务 vs 宏任务：**
+- 微任务：Promise.then/catch/finally、queueMicrotask、MutationObserver
+- 宏任务：setTimeout、setInterval、setImmediate、I/O、UI渲染
+
+```javascript
+console.log('1');
+setTimeout(() => console.log('2'), 0);
+Promise.resolve().then(() => console.log('3'));
+console.log('4');
+// 输出：1 4 3 2
+```
+
+---
+
+**题目4：手写代码：实现一个带并发限制的Promise调度器。**
+
+**满分答案：**
+
+```javascript
+class PromiseScheduler {
+    constructor(concurrency) {
+        this.concurrency = concurrency;
+        this.running = 0;
+        this.queue = [];
+    }
+
+    add(promiseFactory) {
+        return new Promise((resolve, reject) => {
+            this.queue.push({ promiseFactory, resolve, reject });
+            this.run();
+        });
+    }
+
+    run() {
+        while (this.running < this.concurrency && this.queue.length > 0) {
+            const { promiseFactory, resolve, reject } = this.queue.shift();
+            this.running++;
+            promiseFactory()
+                .then(resolve)
+                .catch(reject)
+                .finally(() => {
+                    this.running--;
+                    this.run();
+                });
+        }
+    }
+}
+
+// 使用
+const scheduler = new PromiseScheduler(3);
+urls.forEach(url => 
+    scheduler.add(() => fetch(url))
+);
+```
+
+**核心思路：**
+- 维护一个任务队列
+- 控制同时运行的任务数不超过并发限制
+- 一个任务完成后，自动从队列中取出下一个执行
+
+---
