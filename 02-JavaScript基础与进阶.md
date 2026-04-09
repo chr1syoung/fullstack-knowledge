@@ -6948,5 +6948,149 @@ async function simulateRequest(id: number, ms: number) {
 ---
 
 
+
+---
+
+## 2.29 手写防抖（Debounce）函数
+
+#### 知识点详解
+
+**手写防抖（基础版）：**
+
+```typescript
+function debounce<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  return function (this: unknown, ...args: Parameters<T>) {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+    timer = setTimeout(() => {
+      fn.apply(this, args);
+      timer = null;
+    }, delay);
+  };
+}
+
+// 测试
+const handleSearch = (query: string) => {
+  console.log('搜索:', query);
+};
+
+const debouncedSearch = debounce(handleSearch, 300);
+
+// AI 搜索建议场景
+input.addEventListener('input', (e) => {
+  debouncedSearch((e.target as HTMLInputElement).value);
+});
+```
+
+**进阶版（立即执行 + 取消）：**
+
+```typescript
+interface DebouncedFn<T extends unknown[]> {
+  (this: unknown, ...args: T): void;
+  cancel(): void;
+  flush(): void;
+}
+
+function debounce<T extends unknown[]>(
+  fn: (...args: T) => unknown,
+  delay: number,
+  immediate = false
+): DebouncedFn<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = function (this: unknown, ...args: T) {
+    if (timer !== null) clearTimeout(timer);
+
+    if (immediate && !timer) {
+      fn.apply(this, args);
+    }
+
+    timer = setTimeout(() => {
+      if (!immediate) fn.apply(this, args);
+      timer = null;
+    }, delay);
+  };
+
+  debounced.cancel = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  debounced.flush = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+      fn.apply(debounced, args_ref);
+    }
+  };
+
+  let args_ref: T;
+  return debounced as DebouncedFn<T>;
+}
+```
+
+**节流（Throttle）：**
+
+```typescript
+function throttle<T extends unknown[]>(
+  fn: (...args: T) => unknown,
+  delay: number
+): DebouncedFn<T> {
+  let last = 0;
+
+  return function (this: unknown, ...args: T) {
+    const now = Date.now();
+    if (now - last >= delay) {
+      last = now;
+      fn.apply(this, args);
+    }
+  };
+}
+```
+
+#### 真实面试题
+
+**题目：手写题：请实现一个简单的防抖（Debounce）函数，并说明它在 AI 搜索建议场景下的应用。**
+
+**满分答案：**
+
+```typescript
+function debounce<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  return function (...args: Parameters<T>) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn(...args);
+      timer = null;
+    }, delay);
+  };
+}
+
+// AI 搜索建议场景：
+// 用户输入"前端框架哪个好" -> 触发6次input事件
+// 防抖后：只发送最后一次（300ms无新输入后）
+const onInput = debounce((value: string) => {
+  fetchAICompletions(value);  // 只发1次请求
+}, 300);
+
+input.addEventListener('input', (e) => onInput(e.target.value));
+```
+
+**面试加分点：**
+- 提到"AI 搜索用防抖节省 Token，每次请求都花钱"
+- 提到"cancel() 取消最后一次，用在组件卸载时"
+- 提到"immediate=true 立即执行第一次，用户感觉更快"
 ---
 ---
