@@ -1523,4 +1523,72 @@ type Status = 'pending' | 'success' | 'error';
 type ID = string | number;
 ```
 
+#### 真实面试题
+
+**题目：TypeScript 中的 Interface 和 Type 有什么区别？在定义 AI 接口响应时你会如何选择？**
+
+**满分答案：**
+
+**选择原则：**
+
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| AI 接口响应结构 | interface | 可被 implements，未来可扩展 |
+| 联合类型 / 映射类型 | type | 语法更灵活 |
+| AI 状态枚举 | type | 联合类型更直观 |
+| 配置对象（部分可选） | type + Partial | 语义清晰 |
+
+**AI 接口响应推荐写法：**
+
+```typescript
+// AI 消息响应 - 推荐 interface
+interface AIMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  model?: string;
+  tokens?: number;
+  finishReason?: 'stop' | 'length' | 'content_filter';
+}
+
+// AI 流式 Chunk
+interface AIStreamChunk {
+  index: number;       // token 序号
+  delta: string;       // 本次增量文本
+  finishReason?: string;
+}
+
+// 工具调用响应
+interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+interface ToolCallResult {
+  toolCallId: string;
+  output: string;
+}
+
+// 统一响应类型（interface 适合扩展）
+interface AIResponse<T = unknown> {
+  data: T;
+  error?: {
+    code: string;
+    message: string;
+  };
+  meta?: {
+    tokens: number;
+    latency: number;
+    model: string;
+  };
+}
+```
+
+**面试加分点：**
+- 提到"在 AI 接口中，interface 更适合被 implements 扩展"
+- 提到"用 type 做工具函数重载"
+- 提到"strict 模式下两者基本等价，但语义不同"
+- 提到"可以同时使用 interface extends type"
+
 ---

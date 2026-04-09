@@ -4105,6 +4105,70 @@ parent.addEventListener('mouseenter', () => console.log('enter'));
 
 **结论**：除需要事件委托外，优先使用 `mouseenter/mouseleave`，行为更可预测，性能也更好。
 
+#### 真实面试题
+
+**题目：请简述一下浏览器中的事件循环机制，特别是微任务和宏任务的执行顺序。**
+
+**满分答案：**
+
+**执行顺序核心规则：**
+
+1. 执行同步代码（调用栈）
+2. 清空所有微任务队列
+3. 执行一个宏任务
+4. 重复 2-3
+
+**微任务（Microtask）：**
+- Promise.then / catch / finally
+- MutationObserver
+- queueMicrotask()
+- async 函数 await 后的代码
+
+**宏任务（Macrotask）：**
+- setTimeout / setInterval
+- I/O 操作
+- requestAnimationFrame
+- UI 渲染
+
+**完整执行流程：**
+
+```javascript
+console.log('1 - 同步');
+
+setTimeout(() => console.log('4 - setTimeout'), 0);
+
+Promise.resolve()
+  .then(() => console.log('2 - Promise.then'))
+  .then(() => console.log('3 - Promise.then链'));
+
+queueMicrotask(() => console.log('2.5 - queueMicrotask'));
+
+async function test() {
+  console.log('async 开始');
+  await Promise.resolve();
+  console.log('async await 之后 -> 微任务');
+}
+test();
+
+console.log('1 - 同步结束');
+
+// 输出顺序：
+// 1 - 同步
+// async 开始
+// 1 - 同步结束
+// 2 - Promise.then
+// 2.5 - queueMicrotask
+// 3 - Promise.then链
+// async await 之后 -> 微任务
+// 4 - setTimeout
+```
+
+**关键点：**
+- 微任务优先级高于宏任务，同一批微任务按入队顺序执行
+- async 函数中，await 相当于暂停，等待 Promise resolve 后将后续代码加入微任务队列
+- 微任务执行完后会触发"微任务检查点"，清空队列后再执行下一个宏任务
+- 每次宏任务执行前都会重复 2-3 步骤
+
 ---
 
 ## 2.14 MessageChannel
@@ -6549,6 +6613,143 @@ class PromiseScheduler {
 const scheduler = new PromiseScheduler(3);
 urls.forEach(url => 
     scheduler.add(() => fetch(url))
+**核心原理：**
+
+```typescript
+Promise.all = function <T>(promises: Promise<T>[]): Promise<T[]> {
+  const results: T[] = new Array(promises.length);
+  let completed = 0;
+
+  return new Promise((resolve, reject) => {
+    promises.forEach((p, i) => {
+      Promise.resolve(p).then(
+        (value) => {
+          results[i] = value;
+          completed++;
+          if (completed === promises.length) {
+            resolve(results);
+          }
+        },
+        (reason) => reject(reason)  // 快速失败
+      );
+    });
+  });
+};
+```
+
+**关键细节：**
+1. Promise.resolve(p) 包装：支持普通值和 Promise 混合
+2. results[i] = value：保持结果顺序（即使先完成也放对位置）
+3. reject：任一失败立即 reject（快速失败）
+4. 返回新 Promise，状态跟随所有 Promise
+5. 空数组边界：直接 resolve([])
+
+---
+
+## 2.26 手写 Promise.all
+
+#### 知识点详解
+
+**核心原理：**
+
+```typescript
+Promise.all = function <T>(promises: Promise<T>[]): Promise<T[]> {
+  const results: T[] = new Array(promises.length);
+  let completed = 0;
+
+  return new Promise((resolve, reject) => {
+    promises.forEach((p, i) => {
+      Promise.resolve(p).then(
+        (value) => {
+          results[i] = value;
+          completed++;
+          if (completed === promises.length) {
+            resolve(results);
+          }
+        },
+        (reason) => reject(reason)  // 快速失败
+      );
+    });
+  });
+};
+```
+
+**关键细节：**
+1. Promise.resolve(p) 包装：支持普通值和 Promise 混合
+2. results[i] = value：保持结果顺序（即使先完成也放对位置）
+3. reject：任一失败立即 reject（快速失败）
+4. 返回新 Promise，状态跟随所有 Promise
+5. 空数组边界：直接 resolve([])
+
+#### 真实面试题
+
+**题目：请手写一个简单的 Promise.all 实现。**
+
+**满分答案：**
+
+```typescript
+function promiseAll<T>(promises: Promise<T>[]): Promise<T[]> {
+  const results: T[] = new Array(promises.length);
+  let completed = 0;
+
+  return new Promise((resolve, reject) => {
+    // 边界：空数组
+    if (promises.length === 0) {
+      resolve([]);
+      return;
+    }
+
+    promises.forEach((p, index) => {
+      // Promise.resolve 兼容普通值
+      Promise.resolve(p).then(
+        (value) => {
+          results[index] = value as T;
+          completed++;
+          if (completed === promises.length) {
+            resolve(results);
+          }
+        },
+        (error) => reject(error)  // 快速失败
+      );
+    });
+  });
+}
+
+// ============ 测试用例 ============
+(async () => {
+  const r1 = await promiseAll([
+    Promise.resolve(1),
+    Promise.resolve(2),
+    Promise.resolve(3),
+  ]);
+  console.log(r1); // [1, 2, 3]
+
+  // 顺序保持测试
+  const r2 = await promiseAll([
+    new Promise(r => setTimeout(() => r(1), 100)),
+    new Promise(r => setTimeout(() => r(2), 10)),
+    new Promise(r => setTimeout(() => r(3), 50)),
+  ]);
+  console.log(r2); // [1, 2, 3] 顺序保持
+
+  // 错误处理
+  try {
+    await promiseAll([
+      Promise.resolve(1),
+      Promise.reject(new Error('oops')),
+      Promise.resolve(3),
+    ]);
+  } catch (e) {
+    console.log('捕获错误:', e); // Error: oops
+  }
+})();
+```
+
+**面试加分点：**
+- 提到"空数组边界情况"
+- 提到"Promise.resolve 包装原始值"
+- 提到"Promise.allSettled 用于不快速失败的场景"
+- 保持结果顺序（即使 P2 比 P1 先完成）
 );
 ```
 
