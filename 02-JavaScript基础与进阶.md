@@ -6758,4 +6758,195 @@ function promiseAll<T>(promises: Promise<T>[]): Promise<T[]> {
 - 控制同时运行的任务数不超过并发限制
 - 一个任务完成后，自动从队列中取出下一个执行
 
+
+## 2.27 Promise.all vs Promise.allSettled
+
+#### 知识点详解
+
+| 特性 | Promise.all | Promise.allSettled |
+|------|-------------|-------------------|
+| 成功条件 | 所有成功 | 所有完成 |
+| 失败行为 | 立即 reject | 等待全部 |
+| 返回值 | 结果数组 | 状态对象数组 |
+
+```typescript
+// 多模型对比 → allSettled
+const results = await Promise.allSettled([
+    callOpenAI(prompt),
+    callClaude(prompt),
+    callGemini(prompt)
+]);
+results.forEach((r, i) => {
+    if (r.status === 'fulfilled') useResponse(i, r.value);
+    else showError(i, r.reason);
+});
+```
+
+#### 真实面试题
+
+**题目：Promise.all 和 Promise.allSettled 的区别？AI 模型调用选哪个？**
+
+**满分答案：**
+
+**区别：**
+
+| 特性 | Promise.all | Promise.allSettled |
+|------|-------------|-------------------|
+| 成功条件 | 全部成功 | 全部完成 |
+| 失败行为 | 立即 reject | 等待全部完成 |
+| 返回值 | 结果数组 | `{status, value/reason}` 数组 |
+
+**AI 模型调用选择：**
+
+**选 Promise.allSettled：**
+- 多模型对比展示
+- 单个失败不影响其他
+- 需要知道每个模型结果
+
+```typescript
+const results = await Promise.allSettled([
+    callOpenAI(message),
+    callClaude(message)
+]);
+results.forEach((r, i) => {
+    if (r.status === 'fulfilled') showModelResponse(i, r.value);
+    else showModelError(i);
+});
+```
+
+**选 Promise.all：**
+- 数据聚合分析（需全部成功）
+- 任一失败则整体失败
+
+---
+
+
+---
+
+## 2.28 带并发限制的 Promise 调度器
+
+### 知识点详解
+
+**核心思想：**
+- 同时最多执行 N 个异步任务
+- 新任务排队等待，空闲时自动执行
+- 任务完成后自动补充执行
+
+```typescript
+class PromiseScheduler {
+    private running = 0;
+    private queue: Array<() => void> = [];
+
+    constructor(private limit: number) {}
+
+    async add<T>(fn: () => Promise<T>): Promise<T> {
+        return new Promise((resolve, reject) => {
+            this.queue.push(() => fn().then(resolve).catch(reject));
+            this.process();
+        });
+    }
+
+    private process(): void {
+        while (this.running < this.limit && this.queue.length > 0) {
+            const task = this.queue.shift()!;
+            this.running++;
+            task().finally(() => {
+                this.running--;
+                this.process(); // 继续处理下一个
+            });
+        }
+    }
+}
+
+// 使用示例
+const scheduler = new PromiseScheduler(3); // 最多3个并发
+
+const results = await Promise.all([
+    scheduler.add(() => callAPI('/model-1')),
+    scheduler.add(() => callAPI('/model-2')),
+    scheduler.add(() => callAPI('/model-3')),
+    scheduler.add(() => callAPI('/model-4')), // 排队等待
+    scheduler.add(() => callAPI('/model-5')),
+]);
+```
+
+#### 真实面试题
+
+**题目：手写代码：实现一个带并发限制的 Promise 调度器。**
+
+**满分答案：**
+
+**核心思路：**
+1. 维护一个"正在执行"计数器
+2. 任务包装成 Promise 加入队列
+3. 每完成一个，从队列取下一个继续执行
+
+**完整实现：**
+
+```typescript
+class Scheduler {
+    private running = 0;
+    private queue: Array<() => Promise<unknown>> = [];
+
+    constructor(private limit: number) {}
+
+    add<T>(fn: () => Promise<T>): Promise<T> {
+        return new Promise((resolve, reject) => {
+            this.queue.push(() => fn().then(resolve).catch(reject));
+            this.drain();
+        });
+    }
+
+    private drain(): void {
+        while (this.running < this.limit && this.queue.length > 0) {
+            const task = this.queue.shift()!;
+            this.running++;
+            task().finally(() => {
+                this.running--;
+                this.drain(); // 递归：继续执行下一个
+            });
+        }
+    }
+}
+
+// ============ 测试用例 ============
+const scheduler = new Scheduler(2); // 最多2个并发
+
+async function simulateRequest(id: number, ms: number) {
+    console.log(`[${id}] 开始`);
+    await new Promise(r => setTimeout(r, ms));
+    console.log(`[${id}] 完成`);
+    return id;
+}
+
+(async () => {
+    const results = await Promise.all([
+        scheduler.add(() => simulateRequest(1, 1000)),
+        scheduler.add(() => simulateRequest(2, 800)),
+        scheduler.add(() => simulateRequest(3, 600)), // 等待前面完成
+        scheduler.add(() => simulateRequest(4, 400)), // 等待前面完成
+    ]);
+    console.log('全部完成:', results);
+})();
+/*
+执行顺序：
+[1] 开始
+[2] 开始
+[1] 完成 → [3] 开始
+[2] 完成 → [4] 开始
+[3] 完成
+[4] 完成
+全部完成: [1, 2, 3, 4]
+*/
+```
+
+**AI 场景应用：**
+- 多 AI 模型并发调用（如同时查询 GPT/Claude/Gemini）
+- 批量发送 AI 请求时控制并发，防止接口限流
+- 限制同时进行的 Embedding 请求数量
+
+---
+
+
+---
 ---

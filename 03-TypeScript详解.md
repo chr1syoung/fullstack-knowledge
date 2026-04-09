@@ -1591,4 +1591,227 @@ interface AIResponse<T = unknown> {
 - 提到"strict 模式下两者基本等价，但语义不同"
 - 提到"可以同时使用 interface extends type"
 
+
+## 3.9 TypeScript Record 与 Partial
+
+#### 知识点详解
+
+```typescript
+// Record<K, T>：键为 K，值为 T
+type UserMap = Record<string, User>;
+type StatusMap = Record<'success' | 'error', number>;
+
+// Partial<T>：所有属性变为可选
+type PartialUser = Partial<User>;
+
+// AI 接口应用
+interface AIResponse<T = Record<string, unknown>> {
+    code: number;
+    data: T;
+    usage?: Record<string, number>;  // Token 使用统计
+}
+
+type ConfigUpdate = Partial<ModelConfig>;  // 配置部分更新
+```
+
+#### 真实面试题
+
+**题目：TypeScript Record 和 Partial 的作用？AI 接口如何用？**
+
+**满分答案：**
+
+**Record<K, T>**：构造对象类型，键为 K，值为 T
+
+```typescript
+type ModelResponses = Record<'openai' | 'claude' | 'gemini', AIResponse>;
+```
+
+**Partial<T>**：将所有属性变为可选
+
+```typescript
+type ConfigUpdate = Partial<ModelConfig>;
+function updateConfig(current: ModelConfig, updates: ConfigUpdate) {
+    return { ...current, ...updates };
+}
+```
+
+**AI 接口应用：**
+- `Record` 管理多模型响应
+- `Partial` 实现配置部分更新
+- `Record<string, number>` 统计 Token
+
+---
+
+
+---
+
+## 3.10 TypeScript 泛型在 AI 模型接口中的应用
+
+#### 知识点详解
+
+**核心作用：**
+泛型让 TypeScript 在编译时约束 AI 接口返回的数据结构，既保证类型安全，又不失灵活性（不同 AI 模型返回格式不同）。
+
+**场景一：通用 LLM 响应类型**
+
+```typescript
+// 定义泛型响应结构，T 是消息内容的类型
+interface LLMResponse<T = string> {
+  id: string;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: {
+      role: 'assistant' | 'user' | 'system';
+      content: T; // 泛型 T 让内容类型灵活
+    };
+    finish_reason: string;
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
+// 普通对话
+type ChatResponse = LLMResponse<string>;
+
+// 多模态（图片描述）
+interface ImageDescription {
+  url: string;
+  description: string;
+  confidence: number;
+}
+type VisionResponse = LLMResponse<ImageDescription>;
+```
+
+**场景二：流式 Chunk 类型**
+
+```typescript
+// 流式响应单个 chunk
+interface StreamChunk<T = string> {
+  id: string;
+  choices: Array<{
+    index: number;
+    delta: {
+      content: T | null;
+    };
+    finish_reason: string | null;
+  }>;
+}
+
+// 消费端：TypeScript 精确推断类型
+function parseChunk(chunk: StreamChunk<string>): string {
+  return chunk.choices[0]?.delta?.content ?? '';
+}
+```
+
+**场景三：Tool Calling 泛型约束**
+
+```typescript
+// 工具调用参数泛型
+interface ToolCall<T = Record<string, unknown>> {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string; // JSON 字符串，需要解析
+  };
+  // 解析后的参数（运行时填充）
+  _parsed?: T;
+}
+
+// 定义具体工具的参数
+interface WeatherParams {
+  location: string;
+  unit: 'celsius' | 'fahrenheit';
+}
+
+// 安全解析并使用
+function useToolCall<T>(toolCall: ToolCall<T>): T {
+  if (!toolCall._parsed) {
+    toolCall._parsed = JSON.parse(toolCall.function.arguments) as T;
+  }
+  return toolCall._parsed;
+}
+
+// 使用时：TypeScript 知道 params.location 是 string
+const params = useToolCall<WeatherParams>(someToolCall);
+console.log(params.location); // ✅ 类型安全
+```
+
+**场景四：配合 Zod 做运行时校验**
+
+```typescript
+import { z } from 'zod';
+
+// 定义 schema
+const WeatherSchema = z.object({
+  location: z.string(),
+  unit: z.enum(['celsius', 'fahrenheit']),
+});
+
+// AI 返回的 JSON 字符串 → 解析 → 类型安全的对象
+function parseToolArgs<T>(jsonStr: string, schema: z.ZodSchema<T>): T {
+  const raw = JSON.parse(jsonStr);
+  return schema.parse(raw); // 校验 + 类型推断一步完成
+}
+
+const weather = parseToolArgs(someArgs, WeatherSchema);
+// weather 类型为 { location: string; unit: 'celsius' | 'fahrenheit' }
+```
+
+#### 真实面试题
+
+**题目：TypeScript 中的泛型（Generics）在处理 AI 模型接口返回数据时有什么作用？**
+
+**满分答案：**
+
+**核心价值：编译时类型安全 + 运行时灵活性**
+
+**1. 定义通用的 AI 响应结构**
+```typescript
+interface LLMResponse<T = string> {
+  choices: Array<{
+    message: { content: T };
+  }>;
+}
+// 不同模型返回不同内容，但接口一致
+type ChatResp = LLMResponse<string>;
+type VisionResp = LLMResponse<ImageResult>;
+```
+
+**2. 流式 Chunk 的类型约束**
+```typescript
+interface StreamChunk<T> {
+  choices: Array<{ delta: { content: T | null } }>;
+}
+// 调用方知道 content 是 string，不会拿错类型
+```
+
+**3. Tool Calling 参数的泛型安全**
+```typescript
+interface ToolCall<T> {
+  function: { arguments: string }; // JSON 字符串
+  _parsed?: T; // 解析后的类型安全对象
+}
+// 使用时：toolCall._parsed.location → TypeScript 知道是 string
+```
+
+**4. 配合 Zod 实现双重保障**
+```typescript
+// 编译时泛型 + 运行时 Zod 校验 = 双重安全
+const data = ZodSchema.parse(JSON.parse(rawJson));
+```
+
+**面试加分：**
+- 提到"泛型让同一套接口代码适配多种 AI 模型"
+- 提到"Tool Calling 的 arguments 是 JSON 字符串，泛型让我们安全解析"
+- 提到"配合 Zod 实现编译时+运行时双重类型安全"
+
+---
+
+
+---
 ---

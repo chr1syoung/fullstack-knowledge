@@ -5901,4 +5901,103 @@ flex-basis: 0%;
 - `flex-shrink: 1`：空间不足时，该元素按比例缩小
 - `flex-basis: 0%`：基础大小为0，完全按flex-grow分配空间
 
+
+## 1.2.22 CSS Flex 布局与 flex:1 简写
+
+### 知识点详解
+
+**Flex 布局核心概念：**
+
+Flexbox（Flexible Box）是 CSS3 提出的一种一维布局模型，用于在主轴和交叉轴上灵活分配空间。
+
+```css
+.container {
+    display: flex;                    /* 启用 Flex 布局 */
+    flex-direction: row;              /* 主轴方向：水平（默认） */
+    justify-content: space-between;   /* 主轴对齐方式 */
+    align-items: center;              /* 交叉轴对齐方式 */
+    flex-wrap: wrap;                  /* 换行控制 */
+    gap: 16px;                       /* 项目间距 */
+}
+```
+
+**flex:1 的完整含义：**
+
+`flex:1` 是三个属性的简写（全写为 `flex: 1 1 0%`）：
+
+```css
+.item {
+    flex-grow: 1;    /* 扩展比例：占据剩余空间的 1 份 */
+    flex-shrink: 1;  /* 收缩比例：空间不足时收缩 1 份 */
+    flex-basis: 0%;  /* 基础尺寸：初始大小为 0%（内容不占宽） */
+}
+```
+
+**`flex:1` vs `flex:1 1 auto` vs `flex:1 0 auto`：**
+
+| 属性 | 扩展 | 收缩 | 基础尺寸 | 典型场景 |
+|------|------|------|---------|---------|
+| `flex: 1` | ✅ | ✅ | `0%` | 等分剩余空间，内容不参与分配 |
+| `flex: 1 1 auto` | ✅ | ✅ | `auto` | 基准为自身内容，再分配剩余空间 |
+| `flex: 0 0 200px` | ❌ | ❌ | `200px` | 固定尺寸，不伸缩 |
+
+```css
+/* 等分布局（常见于导航栏） */
+.nav { display: flex; }
+.nav-item { flex: 1; text-align: center; }
+
+/* 左右固定，中间自适应（三栏布局） */
+.layout { display: flex; }
+.sidebar-left  { flex: 0 0 200px; }
+.content       { flex: 1; }         /* 中间区域占满剩余 */
+.sidebar-right { flex: 0 0 200px; }
+```
+
+#### 真实面试题
+
+**题目：简述 CSS 中的 Flex 布局，并说明 `flex:1` 是哪些属性的简写？**
+
+**满分答案：**
+
+**Flex 布局是什么：**
+Flexbox 是 CSS3 一维布局模型，通过 `display: flex` 启用。容器内的子元素（Flex 项目）可以在主轴和交叉轴上灵活分配空间、对齐。
+
+**核心属性：**
+
+```css
+.container {
+    display: flex;
+    flex-direction: row;           /* 主轴：水平 → 交叉轴：垂直 */
+    justify-content: space-between; /* 主轴对齐 */
+    align-items: center;            /* 交叉轴对齐 */
+}
+```
+
+**`flex: 1` 的完整含义：**
+
+`flex: 1` = `flex-grow: 1; flex-shrink: 1; flex-basis: 0%;`
+
+| 子属性 | 值 | 含义 |
+|--------|-----|------|
+| `flex-grow` | `1` | 扩展比例 = 1份（参与分配剩余空间） |
+| `flex-shrink` | `1` | 收缩比例 = 1份（空间不足时等比收缩） |
+| `flex-basis` | `0%` | 基础尺寸 = 0%（内容不占初始宽度） |
+
+**常见误区：**
+- `flex: 1` ≠ `flex: 1 1 auto`（后者基础尺寸是内容实际宽度）
+- `flex: auto` = `flex: 1 1 auto`（自动尺寸 + 等比伸缩）
+- `flex: none` = `flex: 0 0 auto`（完全不伸缩）
+
+**AI 组件应用场景：**
+```css
+/* 消息气泡靠右/左，flex 处理对齐 */
+.message-row { display: flex; align-items: flex-end; }
+.avatar       { flex: 0 0 40px; }
+.message-body { flex: 1; min-width: 0; }  /* min-width:0 防文字溢出 */
+```
+
+---
+
+
+---
 ---

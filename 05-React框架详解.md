@@ -3518,4 +3518,57 @@ function workLoop(deadline) {
 }
 ```
 
+
+## 5.18 React Concurrent Mode
+
+#### 知识点详解
+
+**核心 API：**
+
+```tsx
+// useTransition - 标记非紧急更新
+const [isPending, startTransition] = useTransition();
+startTransition(() => {
+    setMessages(prev => [...prev, chunk]);  // 可被打断
+});
+
+// useDeferredValue - 延迟值
+const deferredMessages = useDeferredValue(messages);
+```
+
+#### 真实面试题
+
+**题目：React Concurrent Mode 对 AI 交互体验的帮助？**
+
+**满分答案：**
+
+**对 AI 交互的帮助：**
+
+1. **可中断渲染**：AI 内容渲染可被用户输入/滚动打断
+2. **优先级调度**：用户操作 > AI 内容更新
+3. **useTransition**：AI 回复标记为非紧急
+
+```tsx
+function AIChat() {
+    const [isPending, startTransition] = useTransition();
+    
+    // AI 流式输出
+    startTransition(() => {
+        setMessages(prev => [...prev, chunk]);
+    });
+    
+    return (
+        <>
+            <Input />  {/* 始终响应 ✅ */}
+            {isPending && <Loading />}
+            <MessageList messages={messages} />  {/* 可被打断 ✅ */}
+        </>
+    );
+}
+```
+
+---
+
+
+---
 ---
